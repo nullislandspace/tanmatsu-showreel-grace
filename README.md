@@ -4,9 +4,17 @@ A demo reel for [SynthEngine3D](https://github.com/nullislandspace/synthengine3D
 [Tanmatsu](https://nicolaielectronics.nl/docs/tanmatsu/), run through
 [Graceloader](https://github.com/nullislandspace/tanmatsu-graceloader).
 
-**Status: scaffold.** The engine is wired into the build and `main/main.c` draws one
-spinning triangle -- enough to prove the toolchain, the link and the projection. The reel
-itself is not designed yet.
+**Status: one reel item.** `main/ship.c` puts the Race the Synth ship on a turntable
+against a black screen -- 169 vertices, 306 triangles and 84 outline edges, back-face
+culled and flat-shaded per face. The reel itself is not designed yet; this is the first
+item and the proof that the scene pipeline takes real geometry.
+
+The mesh in `main/objects/ship_model.h` is vendored from
+[`tanmatsu-synthracer-grace`](https://github.com/nullislandspace/tanmatsu-synthracer-grace),
+which generates it from `openscad/ship.3mf`. It is auto-generated: re-export it there
+rather than editing it here. Note that the engine has no lighting of its own -- `scene_tri`
+takes one flat colour per triangle -- so the shading is computed in `ship.c` at submit
+time.
 
 The engine lives in [`synthengine3D/`](synthengine3D/) as a git submodule, so a fresh
 checkout needs:
