@@ -1,7 +1,7 @@
 {
-  "name": "Grace Template",
-  "description": "Template app using Graceloader",
-  "categories": ["tools"],
+  "name": "SynthEngine Showreel",
+  "description": "Demo reel for SynthEngine3D",
+  "categories": ["demos"],
   "version": "0.1.0",
   "icon": {
     "16x16": "icon16.png",
@@ -13,7 +13,7 @@
   "application": [
     {
       "targets": ["tanmatsu", "konsool"],
-      "revision": 2,
+      "revision": 1,
       "type": "script",
       "interpreter": "at.cavac.graceloader",
       "executable": "app.so",

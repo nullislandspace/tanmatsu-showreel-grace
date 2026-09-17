@@ -8,4 +8,4 @@ Never run build commands (idf.py, make, cmake) in other project directories. The
 
 **Why:** Running builds in the wrong directory is confusing and wastes time.
 
-**How to apply:** Always stay in /home/cavac/src/tanmatsu/tanmatsu-template-grace for all build commands. Only use tanmatsu-launcher for reading source files to copy/adapt.
+**How to apply:** Always stay in /home/cavac/src/tanmatsu/tanmatsu-showreel-grace for all build commands. Only use tanmatsu-launcher for reading source files to copy/adapt.
