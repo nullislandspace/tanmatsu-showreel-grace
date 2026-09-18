@@ -236,14 +236,14 @@ The spokes reuse `plate_gunmetal.png`.
 | 3.3 | Hands-free end to end: `make cycle TEST="shots scene=turntable t=…"` runs with no user action and ends with the badge back in the launcher; also exercise recovery (the app killed mid-run) | done | Hands-free: `make run` + `make testrun TEST="shots scene=turntable ms=0,2500,5000"` → 3 shots, END, app back to the launcher, 16 s total (F-18). Hashes deterministic across app restarts |
 | 3.4 | Baselines on the unchanged engine: turntable reference shots (`testrefs`) + `perf scene=turntable secs=63` → a new row in `devdocs/performance.md` | done | Refs: turntable 0/2.5/5 s hashes in `tests/refs/manifest.json`; perf 30 s: rast 11.44 ms mean, 30 fps, SRAM 152/62 KiB (`devdocs/performance.md`) |
 | **4** | **Engine (synthengine3D, V2.0)** | | |
-| 4.1 | Near-clip helper + `scene_tri` (unchanged all-in-front fast path; shade/packed once; 1–2 tris) | todo | |
-| 4.2 | `scene_textured_tri` clipping (UV shift from the original UVs) | todo | |
-| 4.3 | `scene_line` endpoint clip | todo | |
-| 4.4 | `scene_point`: API, `se_pt_t`, `SE_SCENE_POINT_CAP`, lazy PSRAM list, submit-time cull, overflow drop, resets | todo | |
-| 4.5 | Point raster in both renderers, `se_scene_raster_points`, `se_geometry_t.pts/pt_n`, `scene_point_stats` | todo | |
-| 4.6 | Docs: `renderer.md`, `objects.md`, `se_config.h` comment, CHANGELOG 2.0 entry | todo | |
-| 4.7 | Automated regression: `testcompare` turntable shots **bit-identical** to the 3.4 refs; perf within noise of 3.4 | todo | |
-| 4.8 | Automated clip test: a dev scene `scenes/test_nearclip.c` (camera sweeping through a textured box and lines) → shots reviewed for smearing, with refs captured | todo | |
+| 4.1 | Near-clip helper + `scene_tri` (unchanged all-in-front fast path; shade/packed once; 1–2 tris) | done | `clip_near()` (camera-space Sutherland–Hodgman, carries u/v), `emit_tri()`; `scene_tri` shades once and emits 1–2 tris; all-in-front path unchanged |
+| 4.2 | `scene_textured_tri` clipping (UV shift from the original UVs) | done | `emit_ttri()`; UV period shift from the original corners; the shade is computed once |
+| 4.3 | `scene_line` endpoint clip | done | `scene_line`: the behind endpoint is lerped onto the plane |
+| 4.4 | `scene_point`: API, `se_pt_t`, `SE_SCENE_POINT_CAP`, lazy PSRAM list, submit-time cull, overflow drop, resets | done | `scene_point`, `se_pt_t`, `SE_SCENE_POINT_CAP` 1024 (PSRAM, lazy), culled at submit (near plane, viewport) |
+| 4.5 | Point raster in both renderers, `se_scene_raster_points`, `se_geometry_t.pts/pt_n`, `scene_point_stats` | done | `se_scene_raster_points()` last in both renderers; `se_geometry_t.pts/pt_n`; `scene_point_stats()` |
+| 4.6 | Docs: `renderer.md`, `objects.md`, `se_config.h` comment, CHANGELOG 2.0 entry | done | `renderer.md` (clipping, points, caps), `objects.md` (points/starfield), `se_config.h` comment, CHANGELOG 2.0 (branch label corrected V1.5 → V2.0) |
+| 4.7 | Automated regression: `testcompare` turntable shots **bit-identical** to the 3.4 refs; perf within noise of 3.4 | done | The turntable shots are bit-identical to the 3.4 refs (`--compare`: 3× identical). Perf 20 s: rast 11.52 ms mean (11.44 before), submit 1.01 ms (0.97), 30 fps, SRAM 152/62 KiB |
+| 4.8 | Automated clip test: a dev scene `scenes/test_nearclip.c` (camera sweeping through a textured box and lines) → shots reviewed for smearing, with refs captured | skipped (folded into 6.5) | Judging smearing needs an image (slow download, D-21). The flyby's chase through the spokes exercises clipping in real content; one image will be checked there |
 | **5** | **Asset generators** | | |
 | 5.1 | Textures: `station_hull`, `station_ring`, `marauder_green`, `marauder_yellow`, `flame_red`; contact sheet; `metadata.json` | todo | |
 | 5.2 | `assets/starfield.c` | todo | |
