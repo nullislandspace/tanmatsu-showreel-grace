@@ -36,6 +36,18 @@ mat3_t mat3_mul(mat3_t const* a, mat3_t const* b) {
     };
 }
 
+mat3_t mat3_stretch(mat3_t const* m, vec3_t s) {
+    return (mat3_t){
+        .right = v3_scale(m->right, s.x),
+        .up    = v3_scale(m->up, s.y),
+        .fwd   = v3_scale(m->fwd, s.z),
+    };
+}
+
+float mat3_det(mat3_t const* m) {
+    return v3_dot(m->right, v3_cross(m->up, m->fwd));
+}
+
 mat3_t mat3_from_fwd_up(vec3_t fwd, vec3_t up_hint, float roll) {
     vec3_t const f = v3_norm(fwd);
     vec3_t       r = v3_cross(up_hint, f);  // right = up x fwd in this axis system

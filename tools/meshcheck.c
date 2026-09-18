@@ -197,6 +197,31 @@ static int check_mesh(char const* name, mesh_t const* m, bool expect_closed) {
     return parts;
 }
 
+// The parts the builders recorded (mesh_t.parts, for exploding ships)
+// must be exactly the solids found above: contiguous, covering every
+// vertex and triangle, each referencing only its own vertices, and as
+// many as there are connected pieces.
+static void check_recorded_parts(char const* name, mesh_t const* m, int solids) {
+    int bad = 0, v_end = 0, t_end = 0;
+    for (int i = 0; i < m->pn; i++) {
+        mesh_part_t const* p = &m->parts[i];
+        if (p->v0 != v_end || p->t0 != t_end) bad++;
+        v_end = p->v0 + p->vn;
+        t_end = p->t0 + p->tn;
+        for (int k = p->t0; k < p->t0 + p->tn; k++) {
+            int const v[3] = {m->t[k].a, m->t[k].b, m->t[k].c};
+            for (int j = 0; j < 3; j++) {
+                if (v[j] < p->v0 || v[j] >= p->v0 + p->vn) bad++;
+            }
+        }
+    }
+    CHECK(bad == 0, "%s: recorded parts not contiguous or not self-contained (%d problems)", name, bad);
+    CHECK(v_end == m->vn && t_end == m->tn, "%s: recorded parts cover %d/%d verts, %d/%d tris", name, v_end, m->vn,
+          t_end, m->tn);
+    CHECK(m->pn == solids, "%s: %d recorded parts, %d solids", name, m->pn, solids);
+    printf("  %d recorded part(s) match\n", m->pn);
+}
+
 // --- Primitives -----------------------------------------------------------
 
 static void check_primitives(void) {
@@ -280,6 +305,73 @@ static void check_primitives(void) {
     mesh_transform_from(&m, 0, &x);
     check_mesh("box, transformed", &m, true);
     mesh_free(&m);
+
+    // Stretched (the warp effect): non-uniform positive scales along the
+    // model's own axes keep a solid closed and outward...
+    {
+        unsigned seed = 5;
+        int      bad  = 0;
+        for (int i = 0; i < 200; i++) {
+            mat3_t const  r = mat3_from_ypr(frand(&seed) * 6.28f, (frand(&seed) - 0.5f) * 3.0f, frand(&seed) * 6.28f);
+            vec3_t const  s = v3(0.05f + frand(&seed) * 3.0f, 0.05f + frand(&seed) * 3.0f, 0.05f + frand(&seed) * 8.0f);
+            xform_t const xs = {mat3_stretch(&r, s), v3(1, 2, 3), 0.9f};
+            // mat3_stretch(R, s) p == R (s * p)
+            vec3_t const  p  = v3(frand(&seed) - 0.5f, frand(&seed) - 0.5f, frand(&seed) - 0.5f);
+            vec3_t const  want =
+                v3_add(v3(1, 2, 3), mat3_apply(&r, v3_scale(v3(p.x * s.x, p.y * s.y, p.z * s.z), 0.9f)));
+            if (!near3(xform_apply(&xs, p), want, 1e-4f)) bad++;
+            if (mat3_det(&xs.r) <= 0.0f) bad++;
+            mesh_init(&m);
+            mesh_cylinder(&m, 0.4f, -1.0f, 1.0f, 8, true, true, 0, 0, 1.0f);
+            mesh_transform_from(&m, 0, &xs);
+            if (mesh_signed_volume(&m, 0) <= 0.0f) bad++;
+            mesh_free(&m);
+        }
+        CHECK(bad == 0, "stretch: %d of 200 random stretches wrong (point, determinant or volume)", bad);
+        printf("stretch: 200 random stretches keep points, determinant and volume\n");
+        mesh_init(&m);
+        mat3_t const  r  = mat3_from_ypr(0.4f, 0.2f, -0.3f);
+        xform_t const xs = {mat3_stretch(&r, v3(0.3f, 0.3f, 6.0f)), v3(0, 0, 0), 1.0f};
+        mesh_cylinder(&m, 0.4f, -1.0f, 1.0f, 8, true, true, 0, 0, 1.0f);
+        mesh_transform_from(&m, 0, &xs);
+        check_mesh("cylinder, stretched x6 along z", &m, true);
+        mesh_free(&m);
+    }
+    // Recorded parts: two boxes are two parts; a record that lost one is
+    // caught.
+    {
+        mesh_init(&m);
+        mesh_box(&m, v3(0, 0, 0), v3(1, 1, 1), 0, 1.0f);
+        mesh_box(&m, v3(2, 0, 0), v3(3, 1, 1), 0, 1.0f);
+        int const solids = check_mesh("two boxes", &m, true);
+        check_recorded_parts("two boxes", &m, solids);
+        int const before_p = s_fail;
+        m.pn               = 1;
+        printf("(expected to fail:) ");
+        check_recorded_parts("two boxes, one record lost", &m, solids);
+        int const caught_p = s_fail - before_p;
+        s_fail             = before_p;
+        CHECK(caught_p > 0, "checker missed a lost part record");
+        m.pn = 2;
+        mesh_free(&m);
+    }
+    // A mirror (a negative stretch factor) turns a solid inside out, which the
+    // determinant shows and the checker catches.
+    {
+        mat3_t const  r  = mat3_from_ypr(0.4f, 0.2f, -0.3f);
+        xform_t const xm = {mat3_stretch(&r, v3(-1.0f, 1.0f, 1.0f)), v3(0, 0, 0), 1.0f};
+        CHECK(mat3_det(&xm.r) < 0.0f, "mirror: determinant not negative");
+        mesh_init(&m);
+        mesh_box(&m, v3(0, 0, 0), v3(1, 1, 1), 0, 1.0f);
+        mesh_transform_from(&m, 0, &xm);
+        int const before_m = s_fail;
+        printf("(expected to fail:) ");
+        check_mesh("box mirrored", &m, true);
+        int const caught_m = s_fail - before_m;
+        s_fail             = before_m;
+        CHECK(caught_m > 0, "checker missed a mirrored (inside-out) solid");
+        mesh_free(&m);
+    }
 }
 
 // Generators register here as they are written (see the asset headers).

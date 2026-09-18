@@ -56,8 +56,9 @@ static inline vec3_t v3_norm(vec3_t a) {
     return (l > 1e-12f) ? v3_scale(a, 1.0f / l) : v3(0.0f, 0.0f, 1.0f);
 }
 
-// A 3x3 rotation, stored as its three columns: where the model's +x
-// (right), +y (up) and +z (forward) axes point in the world.
+// A 3x3 matrix, stored as its three columns: where the model's +x
+// (right), +y (up) and +z (forward) axes point in the world. Usually a
+// rotation; mat3_stretch() makes one that also stretches.
 typedef struct {
     vec3_t right, up, fwd;
 } mat3_t;
@@ -70,6 +71,14 @@ mat3_t               mat3_rot_y(float a);
 mat3_t               mat3_rot_z(float a);
 // a * b (apply b first, then a).
 mat3_t               mat3_mul(mat3_t const* a, mat3_t const* b);
+// m * diag(s): stretch along the MODEL's own axes by s.x, s.y, s.z, then
+// apply m. A ship stretched along its flight line (the warp effect) is
+// mat3_stretch(&pose.r, v3(thin, thin, long)). Keep all three factors
+// positive: a negative one mirrors, which turns every face inside out
+// (back-face culling then removes the outside of the model).
+mat3_t               mat3_stretch(mat3_t const* m, vec3_t s);
+// Determinant: > 0 for a rotation or a stretch, < 0 for a mirror.
+float                mat3_det(mat3_t const* m);
 // Rotation whose forward is `fwd` and whose up is as close to `up_hint`
 // as the forward allows, then rolled by `roll` about the forward axis.
 // If fwd and up_hint are (nearly) parallel, a fallback up is used.
@@ -79,7 +88,11 @@ static inline vec3_t mat3_apply(mat3_t const* m, vec3_t p) {
               m->right.z * p.x + m->up.z * p.y + m->fwd.z * p.z);
 }
 
-// Model -> world: scale, rotate, then translate.
+// Model -> world: scale, apply r, then translate. r is normally a
+// rotation, but any linear map with a positive determinant works -- a
+// stretch (mat3_stretch) for instance: everything downstream (mesh
+// submission, back-face culling, lighting, guns, flames) works on the
+// transformed points, never on r's axes.
 typedef struct {
     mat3_t r;
     vec3_t pos;

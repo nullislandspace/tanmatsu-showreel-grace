@@ -28,13 +28,25 @@ typedef struct {
     float    uv[3][2];
 } mesh_tri_t;
 
+// One closed solid of a mesh: what one builder call made (a box, a
+// cylinder, a loft...). Its triangles reference only its own vertices.
 typedef struct {
-    vec3_t*     v;
-    int         vn, vcap;
-    mesh_tri_t* t;
-    int         tn, tcap;
-    bool        failed;  // an allocation failed; the mesh is incomplete
-    char const* name;    // for diagnostics (logs, make scenecheck); may be NULL
+    int v0, vn;  // vertices [v0, v0 + vn)
+    int t0, tn;  // triangles [t0, t0 + tn)
+} mesh_part_t;
+
+typedef struct {
+    vec3_t*      v;
+    int          vn, vcap;
+    mesh_tri_t*  t;
+    int          tn, tcap;
+    bool         failed;  // an allocation failed; the mesh is incomplete
+    char const*  name;    // for diagnostics (logs, make scenecheck); may be NULL
+    // The solids, in build order: every builder call below adds one
+    // (raw mesh_vert / mesh_tri do not). An exploding ship submits them
+    // one by one, each with its own motion (mesh_submit_part).
+    mesh_part_t* parts;
+    int          pn, pcap;
 } mesh_t;
 
 // Start an empty mesh. Storage grows as parts are added (PSRAM on the
@@ -49,6 +61,10 @@ void mesh_tri(mesh_t* m, int a, int b, int c, uint8_t mat, float const uv[3][2])
 // Quad a-b-c-d in outward (CCW-seen-from-outside) order, as (a,b,c) +
 // (a,c,d). uv[4][2] in the same corner order.
 void mesh_quad(mesh_t* m, int a, int b, int c, int d, uint8_t mat, float const uv[4][2]);
+
+// Centre (mean of the vertices) of part `part`, in model space: the
+// pivot a flying fragment tumbles about.
+vec3_t mesh_part_centre(mesh_t const* m, int part);
 
 // Apply `x` to every vertex from index `first` on (the part just built).
 // Rotations and uniform scales keep the winding outward.

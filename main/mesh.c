@@ -29,7 +29,32 @@ void mesh_init(mesh_t* m) {
 void mesh_free(mesh_t* m) {
     MESH_FREE(m->v);
     MESH_FREE(m->t);
+    MESH_FREE(m->parts);
     mesh_init(m);
+}
+
+// Record the solid a builder just made: vertices from v0 and triangles
+// from t0 to the end (a builder only references its own vertices).
+static void part_add(mesh_t* m, int v0, int t0) {
+    if (m->failed || m->tn == t0) return;
+    if (m->pn == m->pcap) {
+        int const    cap = m->pcap ? m->pcap * 2 : 8;
+        mesh_part_t* np  = MESH_REALLOC(m->parts, (size_t)cap * sizeof(mesh_part_t));
+        if (np == NULL) {
+            m->failed = true;
+            return;
+        }
+        m->parts = np;
+        m->pcap  = cap;
+    }
+    m->parts[m->pn++] = (mesh_part_t){v0, m->vn - v0, t0, m->tn - t0};
+}
+
+vec3_t mesh_part_centre(mesh_t const* m, int part) {
+    mesh_part_t const* p   = &m->parts[part];
+    vec3_t             sum = v3(0.0f, 0.0f, 0.0f);
+    for (int i = 0; i < p->vn; i++) sum = v3_add(sum, m->v[p->v0 + i]);
+    return p->vn ? v3_scale(sum, 1.0f / (float)p->vn) : sum;
 }
 
 int mesh_vert(mesh_t* m, vec3_t p) {
@@ -161,8 +186,9 @@ static void tri_planar(mesh_t* m, int a, int b, int c, uint8_t mat, float rep, v
 // --- Builders ---------------------------------------------------------
 
 void mesh_box(mesh_t* m, vec3_t lo, vec3_t hi, uint8_t mat, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
     // Corner i: bit 0 = x at hi, bit 1 = y at hi, bit 2 = z at hi.
-    int v[8];
+    int       v[8];
     for (int i = 0; i < 8; i++) {
         v[i] = mesh_vert(m, v3((i & 1) ? hi.x : lo.x, (i & 2) ? hi.y : lo.y, (i & 4) ? hi.z : lo.z));
     }
@@ -172,6 +198,7 @@ void mesh_box(mesh_t* m, vec3_t lo, vec3_t hi, uint8_t mat, float rep) {
     quad_planar(m, v[2], v[3], v[7], v[6], mat, rep, v3(0, 1, 0));   // +y
     quad_planar(m, v[0], v[1], v[3], v[2], mat, rep, v3(0, 0, -1));  // -z
     quad_planar(m, v[4], v[5], v[7], v[6], mat, rep, v3(0, 0, 1));   // +z
+    part_add(m, part_v0, part_t0);
 }
 
 // Rim vertex k of a circle radius r at height z (k wraps).
@@ -187,6 +214,7 @@ static vec3_t radial(int k, float half, int sides) {
 
 void mesh_cylinder(mesh_t* m, float r, float z0, float z1, int sides, bool cap0, bool cap1, uint8_t mat_side,
                    uint8_t mat_cap, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
     int const base = m->vn;
     for (int k = 0; k < sides; k++) {
         mesh_vert(m, rim(r, z0, k, sides));
@@ -212,10 +240,12 @@ void mesh_cylinder(mesh_t* m, float r, float z0, float z1, int sides, bool cap0,
             tri_planar(m, c, base + 2 * k + 1, base + 2 * ((k + 1) % sides) + 1, mat_cap, rep, v3(0, 0, 1));
         }
     }
+    part_add(m, part_v0, part_t0);
 }
 
 void mesh_ring(mesh_t* m, float r_in, float r_out, float z0, float z1, int segs, uint8_t mat_outer, uint8_t mat_inner,
                uint8_t mat_face, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
     // Per segment angle: inner-z0, inner-z1, outer-z0, outer-z1.
     int const base = m->vn;
     for (int k = 0; k < segs; k++) {
@@ -246,10 +276,12 @@ void mesh_ring(mesh_t* m, float r_in, float r_out, float z0, float z1, int segs,
         quad_out(m, i0b, o0b, o1b, i1b, mat_face, uvf, v3(0, 0, -1));
         quad_out(m, i0t, o0t, o1t, i1t, mat_face, uvf, v3(0, 0, 1));
     }
+    part_add(m, part_v0, part_t0);
 }
 
 void mesh_loft(mesh_t* m, int n_sec, int n_pts, float const z[], float const (*xy)[MESH_LOFT_MAX_PTS][2],
                uint8_t mat_side, uint8_t mat_cap, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
     if (n_sec < 2 || n_pts < 3 || n_pts > MESH_LOFT_MAX_PTS) {
         m->failed = true;
         return;
@@ -294,9 +326,11 @@ void mesh_loft(mesh_t* m, int n_sec, int n_pts, float const z[], float const (*x
             tri_planar(m, base + k * n_pts, base + k * n_pts + i, base + k * n_pts + i + 1, mat_cap, rep, out);
         }
     }
+    part_add(m, part_v0, part_t0);
 }
 
 void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_side, uint8_t mat_base, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
     int const base = m->vn;
     for (int k = 0; k < sides; k++) mesh_vert(m, rim(r, z0, k, sides));
     int const   apex = mesh_vert(m, v3(0.0f, 0.0f, z1));
@@ -312,4 +346,5 @@ void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_si
     for (int k = 0; k < sides; k++) {
         tri_planar(m, c, base + k, base + (k + 1) % sides, mat_base, rep, v3(0, 0, z0 < z1 ? -1.0f : 1.0f));
     }
+    part_add(m, part_v0, part_t0);
 }

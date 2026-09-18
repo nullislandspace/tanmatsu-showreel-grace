@@ -15,7 +15,8 @@
 #include <stdint.h>
 #include "xform.h"
 
-#define LASER_RED 0xFFFF3020u
+#define LASER_RED  0xFFFF3020u
+#define LASER_BLUE 0xFF40A0FFu
 
 typedef struct {
     float    duration;  // seconds a shot stays lit
@@ -23,8 +24,10 @@ typedef struct {
     uint32_t argb;
 } laser_style_t;
 
-// The marauders' guns.
+// The marauders' guns: red.
 extern laser_style_t const LASER_STYLE_MARAUDER;
+// The hero ship's guns: blue, otherwise the same.
+extern laser_style_t const LASER_STYLE_PLAYER;
 
 // True while the shot fired at `t_fire` is lit at time `t`.
 static inline bool laser_lit(float t, float t_fire, laser_style_t const* style) {

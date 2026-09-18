@@ -29,6 +29,10 @@ void player_ship_shutdown(void);
 // flicker. Call after the scene's camera is set.
 void player_ship_submit(xform_t const* x, float throttle, double t);
 
+// Muzzle of gun `side` (0 = left, 1 = right) in the world, for the ship
+// posed by `x`: just ahead of the front face of each engine pod.
+vec3_t player_ship_gun(xform_t const* x, int side);
+
 // Model-space bounds of the hull (flames not included).
 void player_ship_bounds(vec3_t* lo, vec3_t* hi);
 

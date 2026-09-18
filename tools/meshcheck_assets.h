@@ -38,11 +38,15 @@ static void check_assets(void) {
     mesh_t m;
     station_build_mesh(&m);
     // Hub, docking port, 8 spokes, ring: 11 closed parts.
-    CHECK(check_mesh("station", &m, true) == 3 + STATION_SPOKES, "station: expected %d parts", 3 + STATION_SPOKES);
+    int const station_solids = check_mesh("station", &m, true);
+    CHECK(station_solids == 3 + STATION_SPOKES, "station: expected %d parts", 3 + STATION_SPOKES);
+    check_recorded_parts("station", &m, station_solids);
     mesh_free(&m);
 
     marauder_build_mesh(&m);
     // Fuselage, canopy, and per side: wing, fin, nacelle, gun.
-    CHECK(check_mesh("marauder", &m, true) == 2 + 2 * 4, "marauder: expected 10 parts");
+    int const marauder_solids = check_mesh("marauder", &m, true);
+    CHECK(marauder_solids == 2 + 2 * 4, "marauder: expected 10 parts");
+    check_recorded_parts("marauder", &m, marauder_solids);
     mesh_free(&m);
 }

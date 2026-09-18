@@ -30,6 +30,7 @@ set(APP_SOURCES
     main/scenes/turntable.c
     main/scenes/asset_viewer.c
     main/scenes/horizon_test.c
+    main/scenes/formation.c
     main/scenes/marauder_pursuit.c
     main/scenes/spacestation_flyby.c
     main/profile.c

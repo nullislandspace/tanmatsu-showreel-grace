@@ -40,9 +40,13 @@ show clock leaves out), **F1** returns to the launcher.
   fixed steps (for the video export and the shot tests).
 - **Assets** (`main/assets/`) are generators any scene can reuse: the player's ship, the
   marauder (one type, green and yellow liveries), the wheel station, a starfield of
-  single-pixel `scene_point`s, Frontier-style engine flames and laser beams. Station and
-  marauder are built procedurally from mesh builders (`main/mesh.c`: box, cylinder,
-  ring, cone, loft).
+  single-pixel `scene_point`s, Frontier-style engine flames and laser beams (red for the
+  marauders, blue for the player). Station and marauder are built procedurally from
+  mesh builders (`main/mesh.c`: box, cylinder, ring, cone, loft); every builder call
+  records a part, so a ship can come apart piece by piece (`mesh_submit_part`), and a
+  pose may stretch as well as rotate (`mat3_stretch`, for the warp).
+- **Formations** (`main/scenes/formation.c`): ships keeping slots in a formation's own
+  frame, weaving, banking and rocking; shared by the marauder scenes.
 - The player's mesh in `main/objects/ship_model.h` is vendored from
   [`tanmatsu-synthracer-grace`](https://github.com/nullislandspace/tanmatsu-synthracer-grace),
   which generates it from `openscad/ship.3mf`. It is auto-generated: re-export it there

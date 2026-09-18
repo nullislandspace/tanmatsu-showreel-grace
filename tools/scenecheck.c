@@ -66,10 +66,8 @@ typedef struct {
 } check_t;
 
 static check_t const CHECKS[] = {
-    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL},
-    {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, NULL, NULL},
-    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},
-    {&SCENE_ASSET_VIEWER, 0.0f, NULL, NULL, NULL},
+    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL}, {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, NULL, NULL},
+    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},       {&SCENE_ASSET_VIEWER, 0.0f, NULL, NULL, NULL},
     {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL},
 };
 #define CHECK_N ((int)(sizeof(CHECKS) / sizeof(CHECKS[0])))
@@ -80,7 +78,7 @@ static check_t const CHECKS[] = {
 #define MAX_LABELS 32  // distinct objects per scene
 #define MAX_SHOTS  16
 #define MAX_SPANS  8
-#define LABEL_LEN  32
+#define LABEL_LEN  48
 
 typedef struct {
     float t0, t1;
@@ -123,8 +121,10 @@ static FILE*        s_out;  // report output (the self-test silences it)
 // --- The current frame --------------------------------------------------------
 
 typedef struct {
-    int           label;  // index into s_labels
+    int           label;     // index into s_labels
+    char          base[32];  // the label without the #k
     mesh_t const* mesh;
+    int           v0, vn, t0, tn;  // what was submitted: all of it or one part
     xform_t       x;
     float         min_z;               // nearest visible point this frame
     float         sx0, sy0, sx1, sy1;  // on-screen bounds of what is drawn
@@ -152,34 +152,60 @@ static int label_index(char const* label) {
     return s_label_n++;
 }
 
-// The wrapper around the real mesh_submit (mesh_render.c is compiled with
-// -Dmesh_submit=mesh_submit_real): names the object, then lets the real
-// code transform, back-face cull and submit it.
+// The wrappers around the real mesh_submit / mesh_submit_part
+// (mesh_render.c is compiled with them renamed to *_real): they name the
+// object, then let the real code transform, back-face cull and submit
+// it. A whole mesh is "name#k", one part of it "name/pN#k", k counting
+// the same object submitted earlier in the frame.
 void mesh_submit_real(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int mat_n);
+void mesh_submit_part_real(mesh_t const* m, int part, xform_t const* x, mesh_mat_t const* mats, int mat_n);
 
-void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int mat_n) {
+static void obj_begin(mesh_t const* m, int part, xform_t const* x) {
     if (s_obj_n == MAX_OBJ) {
         fprintf(stderr, "scenecheck: too many objects in one frame\n");
         exit(5);
     }
+    obj_t* o         = &s_obj[s_obj_n];
+    *o               = (obj_t){.mesh  = m,
+                               .x     = *x,
+                               .v0    = 0,
+                               .vn    = m->vn,
+                               .t0    = 0,
+                               .tn    = m->tn,
+                               .min_z = FLT_MAX,
+                               .sx0   = FLT_MAX,
+                               .sy0   = FLT_MAX,
+                               .sx1   = -FLT_MAX,
+                               .sy1   = -FLT_MAX};
     char const* name = m->name ? m->name : "mesh";
-    int         k    = 0;
-    for (int i = 0; i < s_obj_n; i++) {
-        if (s_obj[i].mesh && strcmp(s_obj[i].mesh->name ? s_obj[i].mesh->name : "mesh", name) == 0) k++;
+    if (part >= 0) {
+        mesh_part_t const* p = &m->parts[part];
+        o->v0                = p->v0;
+        o->vn                = p->vn;
+        o->t0                = p->t0;
+        o->tn                = p->tn;
+        snprintf(o->base, sizeof(o->base), "%s/p%d", name, part);
+    } else {
+        snprintf(o->base, sizeof(o->base), "%s", name);
     }
+    int k = 0;
+    for (int i = 0; i < s_obj_n; i++) k += strcmp(s_obj[i].base, o->base) == 0;
     char label[LABEL_LEN];
-    snprintf(label, sizeof(label), "%s#%d", name, k);
-    obj_t* o = &s_obj[s_obj_n];
-    *o       = (obj_t){.label = label_index(label),
-                       .mesh  = m,
-                       .x     = *x,
-                       .min_z = FLT_MAX,
-                       .sx0   = FLT_MAX,
-                       .sy0   = FLT_MAX,
-                       .sx1   = -FLT_MAX,
-                       .sy1   = -FLT_MAX};
+    snprintf(label, sizeof(label), "%s#%d", o->base, k);
+    o->label = label_index(label);
     s_cur    = s_obj_n++;
+}
+
+void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int mat_n) {
+    obj_begin(m, -1, x);
     mesh_submit_real(m, x, mats, mat_n);
+    s_cur = -1;
+}
+
+void mesh_submit_part(mesh_t const* m, int part, xform_t const* x, mesh_mat_t const* mats, int mat_n) {
+    if (m == NULL || part < 0 || part >= m->pn) return;  // as the real one
+    obj_begin(m, part, x);
+    mesh_submit_part_real(m, part, x, mats, mat_n);
     s_cur = -1;
 }
 
@@ -300,8 +326,8 @@ static float point_tri_dist(vec3_t p, vec3_t a, vec3_t b, vec3_t c) {
 }
 
 typedef struct {
-    vec3_t* v;  // world vertices
-    int     vn;
+    vec3_t* v;  // world vertices (indexed as the mesh's; only the object's range is set)
+    int     v0, vn, t0, tn;
     vec3_t  centre;  // bounding sphere
     float   radius;
     vec3_t* tc;  // per-triangle bounding spheres
@@ -310,22 +336,25 @@ typedef struct {
 
 static void world_build(world_t* w, obj_t const* o) {
     mesh_t const* m = o->mesh;
-    w->vn           = m->vn;
+    w->v0           = o->v0;
+    w->vn           = o->vn;
+    w->t0           = o->t0;
+    w->tn           = o->tn;
     w->v            = malloc((size_t)m->vn * sizeof(vec3_t));
     w->tc           = malloc((size_t)m->tn * sizeof(vec3_t));
     w->tr           = malloc((size_t)m->tn * sizeof(float));
     vec3_t sum      = v3(0.0f, 0.0f, 0.0f);
-    for (int i = 0; i < m->vn; i++) {
+    for (int i = o->v0; i < o->v0 + o->vn; i++) {
         w->v[i] = xform_apply(&o->x, m->v[i]);
         sum     = v3_add(sum, w->v[i]);
     }
-    w->centre = v3_scale(sum, 1.0f / (float)(m->vn ? m->vn : 1));
+    w->centre = v3_scale(sum, 1.0f / (float)(o->vn ? o->vn : 1));
     w->radius = 0.0f;
-    for (int i = 0; i < m->vn; i++) {
+    for (int i = o->v0; i < o->v0 + o->vn; i++) {
         float const r = v3_len(v3_sub(w->v[i], w->centre));
         if (r > w->radius) w->radius = r;
     }
-    for (int i = 0; i < m->tn; i++) {
+    for (int i = o->t0; i < o->t0 + o->tn; i++) {
         vec3_t const a = w->v[m->t[i].a], b = w->v[m->t[i].b], c = w->v[m->t[i].c];
         vec3_t const k = v3_scale(v3_add(v3_add(a, b), c), 1.0f / 3.0f);
         float        r = v3_len(v3_sub(a, k));
@@ -345,10 +374,10 @@ static void world_free(world_t* w) {
 // Smallest distance from any vertex of `a` to any triangle of `b`, or
 // `best` if nothing is nearer.
 static float verts_to_tris(world_t const* a, world_t const* b, mesh_t const* bm, float best) {
-    for (int i = 0; i < a->vn; i++) {
+    for (int i = a->v0; i < a->v0 + a->vn; i++) {
         vec3_t const p = a->v[i];
         if (v3_len(v3_sub(p, b->centre)) - b->radius >= best) continue;
-        for (int j = 0; j < bm->tn; j++) {
+        for (int j = b->t0; j < b->t0 + b->tn; j++) {
             if (v3_len(v3_sub(p, b->tc[j])) - b->tr[j] >= best) continue;
             float const d = point_tri_dist(p, b->v[bm->t[j].a], b->v[bm->t[j].b], b->v[bm->t[j].c]);
             if (d < best) best = d;
@@ -609,9 +638,10 @@ static void st_submit(double t) {
     render_set_camera_6dof(0.0f, 0.0f, s_st_case == ST_NEAR ? -0.8f : -5.0f, 0.0f, 0.0f, 0.0f);
     xform_t a = {mat3_from_ypr(0.0f, 0.0f, 0.0f), v3(0.0f, 0.0f, 0.0f), 1.0f};
     mesh_submit(&s_box, &a, &mat, 1);
-    // A second box: 0.5 clear of the first, or overlapping it.
+    // A second box: 0.5 clear of the first, or overlapping it. Submitted
+    // as a part (the box's only one), so the part path is tested too.
     a.pos = v3(s_st_case == ST_CONTACT ? 0.8f : 1.5f, 0.0f, 0.0f);
-    mesh_submit(&s_box, &a, &mat, 1);
+    mesh_submit_part(&s_box, 0, &a, &mat, 1);
     if (s_st_case == ST_CAP) {
         static se_texture_t* tex;
         if (tex == NULL) tex = se_texture_load("selftest", 0);

@@ -85,6 +85,14 @@ static char const* const PLATE_FILES[PLATE_COUNT] = {
 #define FLAME_LEN   3.0f   // nominal, raw units; flicker scales it
 #define FLICKER_TOP 1.10f  // flame.c's FLICKER_MAX, for framing
 
+// --- Guns -------------------------------------------------------------------
+//
+// The pods taper to a small hexagon at their front, z = 0.875, around
+// the same axis (x = +-5.0, y = 1.299): a gun barrel's mouth. The muzzle
+// sits just ahead of it, so a beam starts clear of the hull.
+#define POD_FRONT_Z  0.875f
+#define MUZZLE_AHEAD 0.1f
+
 // The ridge outline (SHIP_MODEL_EDGES), drawn over the faces. Off: the
 // textured plates carry their own seams and panel lines. Set to 1 to
 // bring it back; nothing else depends on it.
@@ -215,6 +223,11 @@ void player_ship_submit(xform_t const* x, float throttle, double t) {
         scene_line(a.x, a.y, a.z, b.x, b.y, b.z, SHIP_MODEL_OUTLINE_COLOR);
     }
 #endif
+}
+
+vec3_t player_ship_gun(xform_t const* x, int side) {
+    float const s = side ? 1.0f : -1.0f;
+    return xform_apply(x, normalise(s * POD_X, POD_Y, POD_FRONT_Z + MUZZLE_AHEAD));
 }
 
 void player_ship_bounds(vec3_t* lo, vec3_t* hi) {

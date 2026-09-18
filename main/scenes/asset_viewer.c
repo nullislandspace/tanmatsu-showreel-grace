@@ -87,6 +87,12 @@ static void viewer_submit(double t) {
         case SHOT_PLAYER:
             starfield_submit();
             player_ship_submit(&x, 1.0f, t);
+            // Its blue guns, as the marauders' red ones below.
+            for (int side = 0; side < 2; side++) {
+                float const  tf  = floorf((float)lt) + 0.5f * (float)side;
+                vec3_t const gun = player_ship_gun(&x, side);
+                laser_submit_beam(gun, v3_add(gun, v3(0.0f, 0.0f, 20.0f)), (float)lt, tf, &LASER_STYLE_PLAYER);
+            }
             break;
         case SHOT_MARAUDER_GREEN:
         case SHOT_MARAUDER_YELLOW: {

@@ -23,6 +23,12 @@ typedef struct {
 // camera is set.
 void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int mat_n);
 
+// The same for one part of `m` (mesh.h: one builder call's solid), e.g.
+// a fragment of an exploding ship, each with its own `x`. Only that
+// part's vertices are transformed.
+void mesh_submit_part(mesh_t const* m, int part, xform_t const* x, mesh_mat_t const* mats, int mat_n);
+
 // World-space vertices of the last mesh_submit() (valid until the next
-// one), e.g. for drawing an outline over it.
+// one), e.g. for drawing an outline over it. After mesh_submit_part(),
+// only that part's entries are current.
 vec3_t const* mesh_last_world(void);

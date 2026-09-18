@@ -18,7 +18,10 @@ vec3_t const* mesh_last_world(void) {
     return s_world;
 }
 
-void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int mat_n) {
+// Transform vertices [v0, v0 + vn) and submit triangles [t0, t0 + tn),
+// which reference only those.
+static void submit_range(mesh_t const* m, int v0, int vn, int t0, int tn, xform_t const* x, mesh_mat_t const* mats,
+                         int mat_n) {
     if (m == NULL || m->vn == 0) return;
     if (m->vn > s_world_cap) {
         vec3_t* nw = heap_caps_realloc(s_world, (size_t)m->vn * sizeof(vec3_t), MALLOC_CAP_SPIRAM);
@@ -29,10 +32,10 @@ void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int 
         s_world     = nw;
         s_world_cap = m->vn;
     }
-    for (int i = 0; i < m->vn; i++) s_world[i] = xform_apply(x, m->v[i]);
+    for (int i = v0; i < v0 + vn; i++) s_world[i] = xform_apply(x, m->v[i]);
 
     vec3_t const eye = camera_eye();
-    for (int i = 0; i < m->tn; i++) {
+    for (int i = t0; i < t0 + tn; i++) {
         mesh_tri_t const* t = &m->t[i];
         if (t->mat >= mat_n) continue;
         vec3_t const a = s_world[t->a], b = s_world[t->b], c = s_world[t->c];
@@ -49,4 +52,15 @@ void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int 
             scene_tri(a.x, a.y, a.z, b.x, b.y, b.z, c.x, c.y, c.z, mat->argb, mat->flags);
         }
     }
+}
+
+void mesh_submit(mesh_t const* m, xform_t const* x, mesh_mat_t const* mats, int mat_n) {
+    if (m == NULL) return;
+    submit_range(m, 0, m->vn, 0, m->tn, x, mats, mat_n);
+}
+
+void mesh_submit_part(mesh_t const* m, int part, xform_t const* x, mesh_mat_t const* mats, int mat_n) {
+    if (m == NULL || part < 0 || part >= m->pn) return;
+    mesh_part_t const* p = &m->parts[part];
+    submit_range(m, p->v0, p->vn, p->t0, p->tn, x, mats, mat_n);
 }

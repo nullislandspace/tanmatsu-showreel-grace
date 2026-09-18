@@ -271,7 +271,7 @@ meshcheck:
 # checks the near plane, list caps, clearances and framing. No badge
 # needed. SCENES="name ..." checks only those; SCENECHECK_FLAGS=-v lists
 # every clipped frame. mesh_render.c is built on its own, with its
-# mesh_submit renamed, so the checker can wrap it.
+# mesh_submit / mesh_submit_part renamed, so the checker can wrap them.
 SCENECHECK_CFLAGS := -O2 -Wall -Wextra -DMESH_HOST -Itools/host -Itools -Imain -Isynthengine3D/include
 SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c main/mesh.c main/camera.c main/horizon.c \
                      $(wildcard main/assets/*.c) $(wildcard main/scenes/*.c)
@@ -279,7 +279,8 @@ SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c ma
 .PHONY: scenecheck
 scenecheck:
 	mkdir -p $(BUILD)/host
-	$(HOSTCC) $(SCENECHECK_CFLAGS) -Dmesh_submit=mesh_submit_real -c main/mesh_render.c -o $(BUILD)/host/mesh_render_real.o
+	$(HOSTCC) $(SCENECHECK_CFLAGS) -Dmesh_submit=mesh_submit_real -Dmesh_submit_part=mesh_submit_part_real \
+	  -c main/mesh_render.c -o $(BUILD)/host/mesh_render_real.o
 	$(HOSTCC) $(SCENECHECK_CFLAGS) $(SCENECHECK_SRCS) $(BUILD)/host/mesh_render_real.o -lm -o $(BUILD)/host/scenecheck
 	$(BUILD)/host/scenecheck $(SCENECHECK_FLAGS) $(SCENES)
 
