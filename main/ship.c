@@ -200,6 +200,14 @@ void ship_shutdown(void) {
     }
 }
 
+// --- Outline ----------------------------------------------------------
+//
+// The cyan ridge outline (SHIP_MODEL_EDGES), drawn over the faces.
+// TEMPORARILY OFF: the textured plates carry their own seams and panel
+// lines, and the outline is off while that look is judged on its own.
+// Set to 1 to bring it back; nothing else depends on it.
+#define SHIP_DRAW_OUTLINE 0
+
 // --- Motion -----------------------------------------------------------
 //
 // Yaw is the turntable: one revolution every ~10 s, which is slow
@@ -295,12 +303,13 @@ void ship_submit(void) {
                 {wx[b], wy[b], wz[b], uv[1][0], uv[1][1]},
                 {wx[c], wy[c], wz[c], uv[2][0], uv[2][1]},
             };
-            scene_textured_tri(tv, tex);
+            scene_textured_tri(tv, tex, 0);
         } else {
-            scene_tri(wx[a], wy[a], wz[a], wx[b], wy[b], wz[b], wx[c], wy[c], wz[c], SHIP_REGION_COLOR[t->region]);
+            scene_tri(wx[a], wy[a], wz[a], wx[b], wy[b], wz[b], wx[c], wy[c], wz[c], SHIP_REGION_COLOR[t->region], 0);
         }
     }
 
+#if SHIP_DRAW_OUTLINE
     // The cyan ridge outline, drawn over the faces. scene_render biases
     // edges towards the camera so an edge wins against the face it
     // outlines but still loses to genuinely nearer geometry -- so the
@@ -311,4 +320,5 @@ void ship_submit(void) {
         uint8_t const b = SHIP_MODEL_EDGES[i][1];
         scene_line(wx[a], wy[a], wz[a], wx[b], wy[b], wz[b], SHIP_MODEL_OUTLINE_COLOR);
     }
+#endif
 }
