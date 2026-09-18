@@ -252,11 +252,11 @@ The spokes reuse `plate_gunmetal.png`.
 | 5.5 | `assets/laser.c` | done | `laser_submit_bolt(muzzle, dir, age, style)`: a pure function of age (speed 60, length 2, lifetime 1.2 s) |
 | 5.6 | `scenes/asset_viewer.c` (unused dev scene, t-driven orbit per asset); automated shots of each asset → review; tune | done | `scenes/asset_viewer.c` (`assets`, 4 named shots × 8 s, not in the playlist). Perf per asset: F-19. Two frames fetched (marauder green at 12 s, station at 28 s): geometry, livery, red flames and stars correct. Tuning noted: the marauder paint repeat is dense (graph-paper look); the ring's window band only shows from oblique views |
 | **6** | **Scene `spacestation_flyby`** | | |
-| 6.1 | World layout, light, station phase solved so a gap is centred at t_cross | todo | |
-| 6.2 | Paths (player through the gap; marauders round the ring, then converge), orientation, bank, jink | todo | |
-| 6.3 | Shot list: 4 shots with their cameras; ~20 s | todo | |
-| 6.4 | Laser fire schedule (red bolts, near-misses) | todo | |
-| 6.5 | Playlist = [spacestation_flyby]; automated shots at key instants (including mid-gap for near clipping) → review and tune; the user judges the final look | todo | |
+| 6.1 | World layout, light, station phase solved so a gap is centred at t_cross | done | Station spins 0.15 rad/s; phase solved so the gap centre sits at (0, 12.5, 0) at t_cross = 8.5 s; far sun at (-500, 300, 400), 80% |
+| 6.2 | Paths (player through the gap; marauders round the ring, then converge), orientation, bank, jink | done | 13-point Catmull-Rom paths on a shared 1.7 s grid; poses face the velocity; bank ∝ lateral acceleration (0.06 rad per u/s², cap 0.9); player barrel roll 15.0–16.4 s. Host replica: clearance player↔spokes 3.44, green↔ring 6.08, yellow↔ring 7.51, chase camera 3.30 units |
+| 6.3 | Shot list: 4 shots with their cameras; ~20 s | done | establish 0–5 / chase 5–10 / exit 10–14 / reverse 14–20. The establish and exit eyes were chosen by a grid search on the host replica: the closest eye keeping all ships (and, for establish, the wheel) ≥ 25 px inside the frame |
+| 6.4 | Laser fire schedule (red bolts, near-misses) | done | Each marauder fires every 0.35 s from 12 s, guns alternating, aimed at the player 0.25 s ahead + a 1.6-unit hashed miss |
+| 6.5 | Playlist = [spacestation_flyby]; automated shots at key instants (including mid-gap for near clipping) → review and tune; the user judges the final look | done | Playlist = [spacestation_flyby]. Frames checked: chase 8.3 s (the spokes clip cleanly past the lens: the near-clip check of 4.8 ✓), reverse 17 s. Fixes after the first look: sun moved to (-500, 350, -60) (the shots looking back saw only unlit faces); reverse camera closer; marauders close to ~6 units; exit shot re-framed to eye (14, 20, -80), 9.2–12.6 s. The user watched the full sequence on the badge: "looks quite OK" |
 | 6.6 | `perf scene=spacestation_flyby` → per-shot numbers; caps never hit; add a flyby section to `devdocs/performance.md` | todo | |
 | **7** | **Wrap-up** | | |
 | 7.1 | README (scene system, assets, N key, test automation), final pass on the tracking doc | todo | |
@@ -325,6 +325,14 @@ The spokes reuse `plate_gunmetal.png`.
   - station at 62 units: 14.8 ms, 12 + 273 textured.
   All at 30 fps, SRAM 152/62 KiB. The point list lands in PSRAM (16 KB).
   Also added `assets/texcache.c` (textures shared between assets; the flames moved to it).
+- **F-20** 2026-09-18, flyby perf (`perf scene=spacestation_flyby`, 20 s):
+  | shot | fps | rast mean / max |
+  |---|---|---|
+  | establish | 30.0 | 4.3 / 5.0 ms |
+  | chase | **27.6** | **20.7 / 48.3 ms** |
+  | exit | 30.0 | 7.4 / 15.9 ms |
+  | reverse | 29.9 | 7.9 / 14.4 ms |
+  The chase dips to 23–25 fps for ~3 s (t 6–8.5), when the textured ring and spokes fill the screen close up: fill-bound. Caps far from full (≤ 157 tris, ≤ 533 ttris, a few lines). SRAM 152/62 KiB. Performance is to be decided later (D-7).
 
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
@@ -353,6 +361,7 @@ The spokes reuse `plate_gunmetal.png`.
 - **D-20** 2026-09-18, Claude: the engine-free code (`xform.c`, `mesh.c`, `*_mesh.c`) is kept separate from engine-facing code (`camera.c`, `mesh_render.c`, asset submit) so `make meshcheck` can compile it on the host.
 - **D-21** 2026-09-18, user: no routine image downloads (BadgeLink needs well over a minute per 1.1 MB PNG). Shot tests compare framebuffer hashes reported over the console. Images only with `--fetch`, or by hand: `badgelink/tools/badgelink.sh --tcp $BADGELINKPORT fs download /sd/showreel/test/<scene>_<ms>.png out.png`.
 - **D-22** 2026-09-18, user: test scripts are time-boxed; move on to the app. Tight timeouts: connect ≤ 12 s, stall 10 s.
+- **D-23** 2026-09-18, user: flyby v1 accepted ("looks quite OK"). Next: a separate opening scene. The camera is close behind the marauders and right of the right marauder's centreline; they fly in formation with slight wing wiggles, firing at the player (out of frame). It establishes that the marauders won't give up.
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:
