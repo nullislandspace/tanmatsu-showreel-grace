@@ -45,6 +45,11 @@ show clock leaves out), **F1** returns to the launcher.
   mesh builders (`main/mesh.c`: box, cylinder, ring, cone, loft); every builder call
   records a part, so a ship can come apart piece by piece (`mesh_submit_part`), and a
   pose may stretch as well as rotate (`mat3_stretch`, for the warp).
+- **More assets for the full reel**: the title's 3D lettering (`title_text`, a stroke
+  font on `mesh_stroke`), the planet base with its PPA sky (`planet_base`), planets
+  (`mesh_sphere`), asteroids (`mesh_blob`), the warp, explosions with tumbling debris,
+  laser impacts and space dust. The asset viewer (`assets`, not in the playlist) shows
+  each of them as a named shot.
 - **Formations** (`main/scenes/formation.c`): ships keeping slots in a formation's own
   frame, weaving, banking and rocking; shared by the marauder scenes.
 - The player's mesh in `main/objects/ship_model.h` is vendored from

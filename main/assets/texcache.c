@@ -10,7 +10,7 @@
 
 static char const TAG[] = "texcache";
 
-#define TEXCACHE_MAX   16
+#define TEXCACHE_MAX   32
 // Textures stay in PSRAM for now (see devdocs/performance.md: internal
 // SRAM would save ~4% of the textured pass).
 #define TEXCACHE_FLAGS 0

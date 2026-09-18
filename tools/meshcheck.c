@@ -189,7 +189,11 @@ static int check_mesh(char const* name, mesh_t const* m, bool expect_closed) {
         for (int k = 0; k < m->tn && !used; k++) used = find(m->t[k].a) == i;
         if (!used) continue;
         parts++;
-        CHECK(vol[i] > 0.0, "%s: part at vertex %d has signed volume %g (faces point inward)", name, i, vol[i]);
+        // Volume only means something for a closed solid; an open surface
+        // (a ground grid) is checked for its facing by the caller.
+        if (expect_closed) {
+            CHECK(vol[i] > 0.0, "%s: part at vertex %d has signed volume %g (faces point inward)", name, i, vol[i]);
+        }
     }
     free(vol);
     free(s_parent);
@@ -306,6 +310,24 @@ static void check_primitives(void) {
     check_mesh("box, transformed", &m, true);
     mesh_free(&m);
 
+    // Axis-angle (tumbling debris): orthonormal, determinant 1, the axis
+    // left where it is, and a quarter turn about +y matches mat3_rot_y.
+    {
+        unsigned seed = 9;
+        int      bad  = 0;
+        for (int i = 0; i < 200; i++) {
+            vec3_t const k = v3_norm(v3(frand(&seed) - 0.5f, frand(&seed) - 0.5f, frand(&seed) - 0.5f));
+            mat3_t const r = mat3_axis_angle(k, (frand(&seed) - 0.5f) * 12.0f);
+            if (fabsf(mat3_det(&r) - 1.0f) > 1e-4f) bad++;
+            if (fabsf(v3_dot(r.right, r.up)) > 1e-4f || fabsf(v3_dot(r.up, r.fwd)) > 1e-4f) bad++;
+            if (!near3(mat3_apply(&r, k), k, 1e-4f)) bad++;
+        }
+        mat3_t const q = mat3_axis_angle(v3(0, 1, 0), 1.5707963f), y = mat3_rot_y(1.5707963f);
+        if (!near3(q.right, y.right, 1e-5f) || !near3(q.fwd, y.fwd, 1e-5f)) bad++;
+        CHECK(bad == 0, "axis-angle: %d problems", bad);
+        printf("axis-angle: 200 random rotations orthonormal, axis fixed; matches mat3_rot_y\n");
+    }
+
     // Stretched (the warp effect): non-uniform positive scales along the
     // model's own axes keep a solid closed and outward...
     {
@@ -337,6 +359,39 @@ static void check_primitives(void) {
         check_mesh("cylinder, stretched x6 along z", &m, true);
         mesh_free(&m);
     }
+    // A sphere (the planets): closed and outward, 24 x 12.
+    mesh_init(&m);
+    mesh_sphere(&m, 1.0f, 24, 12, 0);
+    check_mesh("sphere 24x12", &m, true);
+    mesh_free(&m);
+
+    // Strokes (the title's letters): open with mitred 45 and 90 degree
+    // turns, and closed (a ring)...
+    {
+        float const zig[5][2] = {{0, 0}, {0, 3}, {2, 3}, {3, 2}, {5, 2}};
+        mesh_init(&m);
+        mesh_stroke(&m, 5, zig, false, 1.0f, 0.0f, 0.8f, 0, 1, 1.0f);
+        check_mesh("stroke, open", &m, true);
+        mesh_free(&m);
+        float const ring[8][2] = {{1, 0}, {2, 0}, {3, 1}, {3, 3}, {2, 4}, {1, 4}, {0, 3}, {0, 1}};
+        mesh_init(&m);
+        mesh_stroke(&m, 8, ring, true, 1.0f, 0.0f, 0.8f, 0, 1, 1.0f);
+        check_mesh("stroke, closed", &m, true);
+        mesh_free(&m);
+        // ...and one folding over itself (a U-turn on a segment shorter
+        // than the stroke is wide) is caught.
+        float const fold[4][2] = {{0, 0}, {0, 3}, {0.4f, 3}, {0.4f, 0}};
+        mesh_init(&m);
+        mesh_stroke(&m, 4, fold, false, 1.0f, 0.0f, 0.8f, 0, 1, 1.0f);
+        int const before_f = s_fail;
+        printf("(expected to fail:) ");
+        check_mesh("stroke folding over", &m, true);
+        int const caught_f = s_fail - before_f;
+        s_fail             = before_f;
+        CHECK(caught_f > 0, "checker missed a stroke folding over itself");
+        mesh_free(&m);
+    }
+
     // Recorded parts: two boxes are two parts; a record that lost one is
     // caught.
     {

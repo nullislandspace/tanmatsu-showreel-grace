@@ -9,7 +9,8 @@ texture size -- because the ship repeats them across large faces.
 
 Plates are 64x64: the engine needs power-of-two edges (it wraps with a
 mask), and at 2 bytes a texel in RGB565 a plate costs 8 KB of internal
-SRAM. The flame is 64x8 (1 KB).
+SRAM. The flame is 64x8 (1 KB); the two planet maps are 128x64
+(equirectangular, 16 KB).
 
     python3 tools/make_textures.py            # write textures/*.png
     python3 tools/make_textures.py --preview  # also write a 4x contact sheet
@@ -246,6 +247,128 @@ def flame_red():
     return np.clip(img, 0, 255).astype(np.uint8)
 
 
+# --- Planet base, asteroid and planet textures (full reel, step 9.1) ---
+#
+# Again their own generator, so everything above stays byte-identical.
+rng3 = np.random.default_rng(0xB0D5)
+
+
+def pnoise(h, w, sx, sy, gen=rng3):
+    """periodic_noise() for an h x w texture (the planet maps are 128x64)."""
+    white = gen.standard_normal((h, w))
+    fy = np.fft.fftfreq(h)[:, None]
+    fx = np.fft.fftfreq(w)[None, :]
+    g = np.exp(-2 * (np.pi ** 2) * ((fx * sx) ** 2 + (fy * sy) ** 2))
+    out = np.real(np.fft.ifft2(np.fft.fft2(white) * g))
+    return out / (np.abs(out).max() + 1e-9)
+
+
+def ground():
+    """The apron round the landing pad: packed ochre dust, darker gravel
+    speckle, a few paler patches. Its average colour is what the PPA's flat
+    ground has to match where the apron ends."""
+    lum = 12 * pnoise(N, N, 6, 6) + 7 * pnoise(N, N, 1.4, 1.4) + 5 * pnoise(N, N, 0.6, 0.6)
+    speck = rng3.random((N, N))
+    lum[speck < 0.06] -= 26                       # gravel
+    lum[speck > 0.97] += 18                       # pale grit
+    return to_rgb(lum, (112, 92, 64))
+
+
+def pad():
+    """Landing pad: poured concrete slabs (two per tile each way) with
+    tar-filled joints, scorch mottling from engine blasts and oil stains."""
+    lum = 6 * pnoise(N, N, 5, 5) + 3 * pnoise(N, N, 1.0, 1.0)
+    for k in (0, 32):
+        lum[k, :] -= 46
+        lum[:, k] -= 46
+        lum[(k + 1) % N, :] += 10
+        lum[:, (k + 1) % N] += 10
+    lum += np.minimum(0, 30 * pnoise(N, N, 9, 9)) * 1.2   # soot, only darkens
+    for _ in range(4):                                     # oil stains
+        cx, cy = rng3.integers(0, N, 2)
+        r = rng3.integers(2, 5)
+        yy, xx = np.mgrid[0:N, 0:N]
+        d = ((xx - cx + N // 2) % N - N // 2) ** 2 + ((yy - cy + N // 2) % N - N // 2) ** 2
+        lum[d <= r * r] -= 30
+    return to_rgb(lum, (150, 148, 142))
+
+
+def industrial_wall():
+    """Factory siding: vertical corrugated steel (a rib every 4 texels, lit
+    from the left), one horizontal panel seam per tile, and rust running
+    down from the seam."""
+    xs = np.arange(N)
+    rib = 16 * np.cos(2 * np.pi * xs / 4.0)[None, :].repeat(N, axis=0)
+    lum = rib + 5 * pnoise(N, N, 4, 4)
+    lum[0, :] -= 40
+    lum[1, :] += 14
+    img = to_rgb(lum, (118, 124, 128)).astype(int)
+    rust = np.clip(pnoise(N, N, 1.2, 9) * 1.4, 0, 1)       # streaks: stretched vertically
+    fall = np.linspace(1.0, 0.2, N)[:, None]               # strongest just below the seam
+    w = (rust * fall)[:, :, None]
+    img = img * (1 - w) + np.array([124, 70, 38])[None, None, :] * w
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def rock():
+    """Asteroid: grey-brown rock at several scales, pocked with small
+    craters (dark bowl, bright rim on the lit upper-left side)."""
+    lum = 18 * pnoise(N, N, 8, 8) + 10 * pnoise(N, N, 2.5, 2.5) + 5 * pnoise(N, N, 0.7, 0.7)
+    yy, xx = np.mgrid[0:N, 0:N]
+    for _ in range(9):
+        cx, cy = rng3.integers(0, N, 2)
+        r = rng3.uniform(2.0, 6.0)
+        dx = (xx - cx + N // 2) % N - N // 2
+        dy = (yy - cy + N // 2) % N - N // 2
+        d = np.sqrt(dx * dx + dy * dy)
+        lum[d < r] -= 22
+        rim = (d >= r) & (d < r + 1.5)
+        lum[rim & (dx + dy < 0)] += 20
+        lum[rim & (dx + dy >= 0)] -= 10
+    return to_rgb(lum, (112, 104, 96))
+
+
+def planet_terran():
+    """The industrial planet from orbit, 128x64 equirectangular (u wraps
+    round the equator): ochre continents, dark slate seas, grey ice at the
+    poles and thin cloud."""
+    h, w = 64, 128
+    height = pnoise(h, w, 7, 7) + 0.35 * pnoise(h, w, 2, 2)
+    land = height > 0.05
+    img = np.zeros((h, w, 3))
+    img[:] = (44, 60, 72)                                   # sea
+    shade = (height - 0.05)[:, :, None] * 120
+    img[land] = (np.array([150, 118, 72])[None, :] + shade[land]).clip(0, 255)
+    lat = np.abs(np.linspace(-1, 1, h))[:, None]
+    ice = lat + 0.08 * pnoise(h, w, 3, 3) > 0.82
+    img[ice] = (196, 200, 206)
+    cloud = np.clip((pnoise(h, w, 4, 1.5) - 0.25) * 2.2, 0, 1)[:, :, None]
+    img = img * (1 - 0.7 * cloud) + 225 * 0.7 * cloud
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def planet_gas():
+    """The gas giant of the second system, 128x64 equirectangular:
+    latitude bands in cream, tan and rust, their edges torn by turbulence,
+    and one oval storm."""
+    h, w = 64, 128
+    y = np.linspace(-1, 1, h)[:, None].repeat(w, axis=1)
+    warp = 0.09 * pnoise(h, w, 10, 2.5) + 0.03 * pnoise(h, w, 2, 1)
+    yw = y + warp
+    # Broad belts of uneven width: two latitude frequencies beating.
+    b = 0.65 * np.sin(yw * np.pi * 3.1) + 0.35 * np.sin(yw * np.pi * 7.7 + 1.3)
+    stops = np.array([[92, 50, 34], [176, 118, 72], [222, 196, 150], [196, 150, 100]], float)
+    t = (b + 1) / 2 * (len(stops) - 1)
+    i = np.clip(t.astype(int), 0, len(stops) - 2)
+    f = (t - i)[:, :, None]
+    img = stops[i] * (1 - f) + stops[i + 1] * f
+    yy, xx = np.mgrid[0:h, 0:w]
+    storm = ((xx - 88) / 9.0) ** 2 + ((yy - 40) / 4.0) ** 2
+    img[storm < 1] = img[storm < 1] * 0.4 + np.array([200, 96, 60]) * 0.6
+    img[(storm >= 1) & (storm < 1.6)] *= 1.12
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
 TEXTURES = {
     "plate_riveted.png": riveted,
     "plate_brushed.png": brushed,
@@ -257,6 +380,12 @@ TEXTURES = {
     "marauder_green.png": marauder_green,
     "marauder_yellow.png": marauder_yellow,
     "flame_red.png": flame_red,
+    "ground.png": ground,
+    "pad.png": pad,
+    "industrial_wall.png": industrial_wall,
+    "rock.png": rock,
+    "planet_terran.png": planet_terran,
+    "planet_gas.png": planet_gas,
 }
 
 

@@ -14,11 +14,7 @@ static char const TAG[] = "reel";
 
 // Every scene there is (initialised at startup, selectable by name).
 static scene_def_t const* const ALL_SCENES[] = {
-    &SCENE_MARAUDER_PURSUIT,
-    &SCENE_SPACESTATION_FLYBY,
-    &SCENE_TURNTABLE,
-    &SCENE_ASSET_VIEWER,
-    &SCENE_HORIZON_TEST,
+    &SCENE_MARAUDER_PURSUIT, &SCENE_SPACESTATION_FLYBY, &SCENE_TURNTABLE, &SCENE_ASSET_VIEWER, &SCENE_HORIZON_TEST,
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
@@ -89,6 +85,7 @@ void reel_camera(void) {
 }
 
 backdrop_t const* reel_backdrop(void) {
+    if (s_cur->backdrop_at) return s_cur->backdrop_at(reel_scene_time());
     return &s_cur->backdrop;
 }
 

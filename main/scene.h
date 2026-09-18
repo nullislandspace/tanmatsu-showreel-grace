@@ -39,4 +39,7 @@ typedef struct {
     // What is behind everything (backdrop.h). Zero-initialised: black
     // space.
     backdrop_t backdrop;
+    // Optional: a backdrop that changes during the scene (e.g. per shot);
+    // when set it is used instead of `backdrop`.
+    backdrop_t const* (*backdrop_at)(double t);
 } scene_def_t;

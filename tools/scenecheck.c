@@ -39,6 +39,7 @@
 
 #include "host/scenecheck.h"
 #include <float.h>
+#include <fnmatch.h>
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,14 +61,17 @@
 typedef struct {
     scene_def_t const* scene;
     float              secs;        // 0: the scene's duration
-    char const*        near_ok;     // objects allowed through the near plane, "a,b"
-    char const*        contact_ok;  // object pairs allowed to touch, "a-b,c-d"
+    char const*        near_ok;     // objects allowed through the near plane, "a,b" (globs)
+    char const*        contact_ok;  // object pairs allowed to touch, "a-b,c-d" (globs)
     char const*        why;         // why those are allowed
 } check_t;
 
 static check_t const CHECKS[] = {
-    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL}, {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, NULL, NULL},
-    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},       {&SCENE_ASSET_VIEWER, 0.0f, NULL, NULL, NULL},
+    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL},
+    {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, NULL, NULL},
+    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},
+    {&SCENE_ASSET_VIEWER, 0.0f, NULL, "marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*,apron*-base*",
+     "an exploding ship's parts start out touching each other and the fireball; the base stands on the apron"},
     {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL},
 };
 #define CHECK_N ((int)(sizeof(CHECKS) / sizeof(CHECKS[0])))
@@ -477,13 +481,16 @@ static void frame_end(int frame, float t, char const* shot) {
 }
 
 // "a,b,c" contains `item`?
+// "a,b,c" has a pattern matching `item`? Patterns are shell globs
+// (fnmatch): "marauder/p*" is any part of a marauder.
 static bool listed(char const* list, char const* item) {
     if (list == NULL) return false;
-    size_t const n = strlen(item);
     for (char const* p = list; *p;) {
         char const*  e   = strchr(p, ',');
         size_t const len = e ? (size_t)(e - p) : strlen(p);
-        if (len == n && strncmp(p, item, n) == 0) return true;
+        char         pat[96];
+        snprintf(pat, sizeof(pat), "%.*s", (int)len, p);
+        if (fnmatch(pat, item, 0) == 0) return true;
         if (!e) break;
         p = e + 1;
     }
@@ -589,6 +596,7 @@ static int check_scene(check_t const* c) {
         }
     }
 
+    if (c->contact_ok) fprintf(s_out, "    allowed to touch: %s -- %s\n", c->contact_ok, c->why ? c->why : "");
     fprintf(s_out, "  framing (largest on-screen extent per shot, px, w x h)\n");
     for (int i = 0; i < s_shot_n; i++) {
         shot_stat_t const* s = &s_shots[i];

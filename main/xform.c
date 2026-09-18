@@ -44,6 +44,17 @@ mat3_t mat3_stretch(mat3_t const* m, vec3_t s) {
     };
 }
 
+mat3_t mat3_axis_angle(vec3_t k, float angle) {
+    // Rodrigues: R p = p cos + (k x p) sin + k (k . p)(1 - cos), applied
+    // to the three unit axes to get the columns.
+    float const c = cosf(angle), s = sinf(angle), t = 1.0f - c;
+    return (mat3_t){
+        .right = v3(t * k.x * k.x + c, t * k.x * k.y + s * k.z, t * k.x * k.z - s * k.y),
+        .up    = v3(t * k.x * k.y - s * k.z, t * k.y * k.y + c, t * k.y * k.z + s * k.x),
+        .fwd   = v3(t * k.x * k.z + s * k.y, t * k.y * k.z - s * k.x, t * k.z * k.z + c),
+    };
+}
+
 float mat3_det(mat3_t const* m) {
     return v3_dot(m->right, v3_cross(m->up, m->fwd));
 }

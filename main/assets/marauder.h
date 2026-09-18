@@ -24,6 +24,15 @@ void marauder_shutdown(void);
 // `flicker_seed` makes each ship's flames shimmer on their own.
 void marauder_submit(xform_t const* x, marauder_livery_t livery, float throttle, double t, unsigned flicker_seed);
 
+// The wreck of a marauder that exploded at `t_explode` posed by `at` and
+// moving with `vel` (units per second), at time `t`: its parts (canopy,
+// wings, fins, nacelles, guns, fuselage) fly apart, each with its own
+// outward velocity on top of the ship's, tumbling about its own centre.
+// Draw it from t_explode on, instead of the ship (explosion.h adds the
+// fireball).
+void marauder_submit_debris(xform_t const* at, vec3_t vel, marauder_livery_t livery, float t, float t_explode,
+                            unsigned seed);
+
 // World position of gun muzzle `side` (0 = left, 1 = right) on the ship
 // posed by `x` -- where a laser bolt starts.
 vec3_t marauder_gun(xform_t const* x, int side);

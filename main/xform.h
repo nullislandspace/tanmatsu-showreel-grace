@@ -79,6 +79,8 @@ mat3_t               mat3_mul(mat3_t const* a, mat3_t const* b);
 mat3_t               mat3_stretch(mat3_t const* m, vec3_t s);
 // Determinant: > 0 for a rotation or a stretch, < 0 for a mirror.
 float                mat3_det(mat3_t const* m);
+// Rotation by `angle` radians about the unit axis `axis` (right-handed).
+mat3_t               mat3_axis_angle(vec3_t axis, float angle);
 // Rotation whose forward is `fwd` and whose up is as close to `up_hint`
 // as the forward allows, then rolled by `roll` about the forward axis.
 // If fwd and up_hint are (nearly) parallel, a fallback up is used.

@@ -4,6 +4,7 @@
 
 #include "assets/station.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include "assets/texcache.h"
 #include "esp_log.h"
 #include "mesh_render.h"

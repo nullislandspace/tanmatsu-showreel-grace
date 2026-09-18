@@ -28,7 +28,13 @@
         {"source_file": "station_ring.png", "target_file": "station_ring.png"},
         {"source_file": "marauder_green.png", "target_file": "marauder_green.png"},
         {"source_file": "marauder_yellow.png", "target_file": "marauder_yellow.png"},
-        {"source_file": "flame_red.png", "target_file": "flame_red.png"}
+        {"source_file": "flame_red.png", "target_file": "flame_red.png"},
+        {"source_file": "ground.png", "target_file": "ground.png"},
+        {"source_file": "pad.png", "target_file": "pad.png"},
+        {"source_file": "industrial_wall.png", "target_file": "industrial_wall.png"},
+        {"source_file": "rock.png", "target_file": "rock.png"},
+        {"source_file": "planet_terran.png", "target_file": "planet_terran.png"},
+        {"source_file": "planet_gas.png", "target_file": "planet_gas.png"}
       ]
     }
   ]

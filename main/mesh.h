@@ -104,6 +104,31 @@ void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_si
 void mesh_loft(mesh_t* m, int n_sec, int n_pts, float const z[], float const (*xy)[MESH_LOFT_MAX_PTS][2],
                uint8_t mat_side, uint8_t mat_cap, float uv_repeat);
 
+// Stroke: a path of `n` points in the xy plane, drawn `width` wide and
+// extruded from z0 to z1 -- one stroke of a block letter. Joints are
+// mitred, so the whole path is one closed solid: a closed path
+// (`closed`) is a ring, an open one gets flat end caps exactly at its
+// first and last point. Keep every turn at most 90 degrees and every
+// segment long enough that the mitres of its two ends do not meet (the
+// mesh check catches a stroke that folds over). The faces at z0 and z1
+// map planar (u = x, v = -y); the sides map u along the path, v along z.
+#define MESH_STROKE_MAX_PTS 16
+void mesh_stroke(mesh_t* m, int n, float const (*pts)[2], bool closed, float width, float z0, float z1,
+                 uint8_t mat_face, uint8_t mat_side, float uv_repeat);
+
+// Sphere round the origin, radius r: `segs` segments round the equator
+// (longitude) and `rings` from pole to pole (latitude), poles on +-y.
+// Maps an equirectangular texture once: u = longitude (0..1 round, from
+// +z towards +x), v = latitude (0 at the north pole, 1 at the south).
+void mesh_sphere(mesh_t* m, float r, int segs, int rings, uint8_t mat);
+
+// Blob: an icosahedron subdivided `subdiv` times (20 * 4^subdiv
+// triangles), each vertex pushed out along its direction to
+// radius(dir, user). Closed whatever radius() returns, as long as it is
+// positive and smooth enough that no face folds over. Maps planar.
+void mesh_blob(mesh_t* m, int subdiv, float (*radius)(vec3_t dir, void* user), void* user, uint8_t mat,
+               float uv_repeat);
+
 // Signed volume of the triangles from index `first_tri` on (positive
 // for a closed outward-wound solid).
 float mesh_signed_volume(mesh_t const* m, int first_tri);

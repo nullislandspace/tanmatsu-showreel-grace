@@ -409,15 +409,15 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 | 8.6 | `scenes/formation.c`: the pursuit's formation, weave and bank maths, shared; the pursuit renders unchanged (hash-compare shots before/after) | done | Straight-line formation; slots, weave and camera offsets in the formation's own frame (exact for axis-aligned flight: the axis is normalised by division). Refs captured first for the pursuit (4 instants) and, for the first time, the flyby (4). After: flyby 4/4 identical; pursuit 3/4 identical, 3.87 s differs by FMA rounding (F-25), accepted (D-32) and re-captured. scenecheck numbers unchanged |
 | 8.7 | Player guns (`player_ship_gun`) and `LASER_STYLE_PLAYER` (blue) | done | Muzzles 0.1 raw units ahead of the pods' front faces (z 0.875, x ±5.0, y 1.299 raw). `LASER_BLUE` `0xFF40A0FF`, otherwise as the marauders' style. Asset viewer fires them in the player shot; one fetched frame (6.05 s): the beam leaves the pod's tip along the flight line |
 | **9** | **Full reel: new assets** | | |
-| 9.1 | Textures: `ground`, `pad`, `industrial_wall`, `rock`, `planet_terran`, `planet_gas`; contact sheet; `metadata.json` | todo | |
-| 9.2 | `title_text` (stroke font, extruded, face/side materials; meshcheck) | todo | |
-| 9.3 | `planet_base` set: pad, apron, buildings, flare stacks (orange flames), ridge (meshcheck) | todo | |
-| 9.4 | `planet` (UV sphere, two textures; meshcheck); measure against a PPA colour-keyed layer and decide | todo | |
-| 9.5 | `asteroid` (displaced icosphere, seeded; meshcheck) | todo | |
-| 9.6 | `warp` (out / in; stretch, flash) | todo | |
-| 9.7 | `explosion` (parts, fireball, sparks) and `impact` | todo | |
-| 9.8 | `space_dust` | todo | |
-| 9.9 | Asset viewer: shots for the new assets; perf per asset (as F-19) | todo | |
+| 9.1 | Textures: `ground`, `pad`, `industrial_wall`, `rock`, `planet_terran`, `planet_gas`; contact sheet; `metadata.json` | done | `rng3` generator (the ten existing PNGs byte-identical): ground, pad, industrial_wall, rock (64×64), planet_terran, planet_gas (128×64, equirectangular; the gas giant reworked to broad uneven belts after the first contact sheet). `metadata.json`; texcache 16 → 32 entries. Flare stacks reuse `flame_red` (white → orange → red) instead of a new texture |
+| 9.2 | `title_text` (stroke font, extruded, face/side materials; meshcheck) | done | New builder `mesh_stroke` (mitred, extruded path; one closed solid per stroke). Glyph grid: cap 7, x-height 5; B S d e i l o p r s u w and ':'. Lines 59.5 / 36.0 units wide, so "Superior" is set 1.65× larger. meshcheck: 21 + 13 strokes closed; a folded stroke is caught. Host render of the faces checked; on the badge both lines ~320 px, 30 fps (~490 textured tris) |
+| 9.3 | `planet_base` set: pad, apron, buildings, flare stacks (orange flames), ridge (meshcheck) | done | Structures (pad + yellow frame, 2 halls, 3 tanks, 2 chimneys, pipe rack, 2 flare stacks with platforms: 19 solids), apron (8×8 grid, 56 units; open surface checked facing up), ridge (36 panels at 900 units, checked facing the base). Apron unlit and the PPA ground = the apron texture's `mean_argb` (`planet_base_backdrop()`), so the colours match (F-27). **15 fps** from the viewer's orbit (F-26); apron kept as it is for now (D-33) |
+| 9.4 | `planet` (UV sphere, two textures; meshcheck); measure against a PPA colour-keyed layer and decide | done | `mesh_sphere` (24×12, u per corner so the seam needs no duplicate vertex); ~165 textured tris face the camera; 19.3 ms for a 290 px disc, 30 fps. The 128×64 map shows its texels this close. PPA-layer alternative not needed at this cost; revisit if a scene fills the screen with a planet |
+| 9.5 | `asteroid` (displaced icosphere, seeded; meshcheck) | done | `mesh_blob` (icosphere, subdivided twice, radius from a callback); asteroid radius = 9 seeded waves over the sphere. 4 shapes; meshcheck: those plus 50 random seeds at 0.3 lumpiness all closed. Asteroid shot: 563 textured tris (the most of any shot), 13 ms, 30 fps |
+| 9.6 | `warp` (out / in; stretch, flash) | done | `warp_pose()` (stretch ×6 / thin ×0.3 via `mat3_stretch`, racing 30 spans in 0.4 s), `warp_point()`, `warp_submit_flash()` (16 radial lines + a point, 0.25 s; warping in, the burst gathers and brightens). Too small in the viewer's framing to judge; the scenes will show it |
+| 9.7 | `explosion` (parts, fireball, sparks) and `impact` | done | `marauder_submit_debris()` (10 parts, each with its own outward speed and tumble, `mat3_axis_angle`); `explosion_submit()`: two lumpy blobs, faces in three heat shades (mottled fire, after the first frame showed one flat blob), 28 sparks; `impact_submit()` (in the same module). scenecheck allow-lists now take globs (the parts start out touching) |
+| 9.8 | `space_dust` | done | 160 motes wrapped in a 24-unit box round the camera; dots or streaks (towards the point the camera heads for). Dust shot 30 fps |
+| 9.9 | Asset viewer: shots for the new assets; perf per asset (as F-19) | done | 12 shots × 8 s (title, both planets, asteroids, warp, explosion, dust, base); per-shot backdrop (`scene_def_t.backdrop_at`). Perf and frames: F-26. Also: host builds now fail on implicit declarations (one had made "Superior" 6 px wide on the host) |
 | **10** | **Full reel: new scenes** (each: host replica/scenecheck clean → device shots → review → user's look) | | |
 | 10.1 | Scene 1 `title`: layout solved on the host (left end ~5%, right end ~70%), drift-in, hold | todo | |
 | 10.2 | Scene 2 `planet_landing` | todo | |
@@ -430,7 +430,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 | 10.9 | Scene 11 `hero_rolls` | todo | |
 | **11** | **Full reel: integration** | | |
 | 11.1 | Playlist = all eleven in order (C4.1); scene-to-scene continuity (liveries, directions, where the sun is); the user watches the whole reel on the badge | todo | |
-| 11.2 | `perf` per scene; the slow shots listed in `devdocs/performance.md`; performance decisions with the user (D-7) | todo | |
+| 11.2 | `perf` per scene; the slow shots listed in `devdocs/performance.md`; performance decisions with the user (D-7), including the planet base's apron (F-26, D-33) | todo | |
 | 11.3 | Reference hashes for key frames of every scene (`testrefs`) | todo | |
 | 11.4 | MJPEG export of the full reel; the user checks the video | todo | |
 | **12** | **Full reel: wrap-up** | | |
@@ -530,6 +530,13 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
   - So code that is bit-identical on the host can differ in the last bit on the badge. The pursuit refactor (8.6) computes the centre and then adds the slot, where the old code did it in one expression, so it rounds once more. With `-mfma -ffp-contract=fast` on the host, 144 of 184 instants differ by 1 ulp in a coordinate (≤ ~8e-6 units, ≤ ~0.004 px). On the badge one of four reference frames changed.
   - No visible or timing effect, and still deterministic per build. Consequences: host replicas agree with the badge only to rounding (irrelevant to scenecheck's margins), and exact frame hashes flag last-bit changes like real regressions.
 
+- **F-26** 2026-09-18, asset viewer on the badge (`perf scene=assets`, 96 s): every shot holds 30 fps except the planet base.
+  - Rast per shot (ms): player 8.2, marauder 9.9, station 14.8, title 6.9, planet 19.3, asteroids 13.1, warp 0.4, explosion 3.2 (max 24), dust 3.6, **base 60**.
+  - The base's cost is pixels, not triangles (~290 textured): from the viewer's orbit the textured apron covers ~800×250 px and the buildings more. Textured fill runs at roughly 5 Mpx/s (the planet: 19 ms for ~66k px), so any screen-sized textured layer costs ~50 ms. The PPA only saves what it paints, so the textured apron must stay small on screen.
+  - Options: shrink the apron to the pad's surroundings; or accept a lower frame rate in the planet scenes. The user keeps the apron as it is for now (D-33).
+  - SRAM unchanged: 152 / 62 KiB.
+- **F-27** 2026-09-18: the lit apron (61, 51, 32) did not match the unlit PPA ground (99, 81, 57): a hard seam. Fixed by drawing the apron unlit (a flat plane takes one shade anyway) and taking the PPA ground from the texture's `mean_argb`: now (110, 90, 61) against (107, 89, 57). What remains visible is texture against flat colour.
+
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
 - **D-2** User: the player ship is the vendored synthracer ship.
@@ -572,6 +579,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 - **D-30** 2026-09-18, user: fix the engine depth-scale bug (F-22 side finding): the scale is derived from the near plane. Also, user: the marauders flying very close to each other in the pursuit (0.43 apart, F-23) is by design.
 - **D-31** 2026-09-18, Claude: scenes set their camera in a separate `camera(t)` callback, called before the backdrop is queued. The sky/ground backdrop needs the horizon, and so the camera, before the PPA starts. Keeping the fill ahead of `submit()` keeps it overlapped with the geometry work (Stunt Racer sets its camera in `on_update` for the same reason). Since scenes are pure functions of t, the split costs nothing.
 - **D-32** 2026-09-18, user: ignore last-bit discrepancies like F-25 ("We are making a game engine here, not a scientific paper"). When a deliberate refactor changes a reference hash only through rounding, re-capture the reference with a reason; no bit-exactness gymnastics.
+- **D-33** 2026-09-18, user: keep the planet base's apron as it is (56×56 units, textured) for now; the fill-rate question (F-26) is decided later, with the planet scenes' real framing (step 11.2).
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:

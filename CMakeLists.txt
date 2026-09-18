@@ -24,6 +24,16 @@ set(APP_SOURCES
     main/assets/starfield.c
     main/assets/station_mesh.c
     main/assets/station.c
+    main/assets/title_text_mesh.c
+    main/assets/title_text.c
+    main/assets/planet_base_mesh.c
+    main/assets/planet_base.c
+    main/assets/planet.c
+    main/assets/asteroid_mesh.c
+    main/assets/asteroid.c
+    main/assets/warp.c
+    main/assets/explosion.c
+    main/assets/space_dust.c
     main/assets/marauder_mesh.c
     main/assets/marauder.c
     main/assets/laser.c

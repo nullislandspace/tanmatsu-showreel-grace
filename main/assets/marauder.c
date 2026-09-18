@@ -4,6 +4,7 @@
 
 #include "assets/marauder.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include "assets/flame.h"
 #include "assets/marauder_mesh.h"
 #include "assets/texcache.h"
@@ -60,6 +61,34 @@ void marauder_submit(xform_t const* x, marauder_livery_t livery, float throttle,
         vec3_t const nozzle = v3(s * MARAUDER_NOZZLE_X, MARAUDER_NOZZLE_Y, MARAUDER_NOZZLE_Z);
         flame_submit(x, nozzle, MARAUDER_NOZZLE_R, len * flame_flicker(t, flicker_seed * 2u + (unsigned)side),
                      FLAME_RED);
+    }
+}
+
+// Debris: how fast parts leave the centre (spans per second), and how
+// fast they tumble (radians per second), each seeded within these.
+#define DEBRIS_SPEED_MIN 0.8f
+#define DEBRIS_SPEED_MAX 2.4f
+#define DEBRIS_SPIN_MAX  9.0f
+
+void marauder_submit_debris(xform_t const* at, vec3_t vel, marauder_livery_t livery, float t, float t_explode,
+                            unsigned seed) {
+    if (!s_ready || (unsigned)livery >= MARAUDER_LIVERY_COUNT || t < t_explode) return;
+    float const u = t - t_explode;
+    for (int i = 0; i < s_mesh.pn; i++) {
+        vec3_t const  c     = mesh_part_centre(&s_mesh, i);  // model space
+        // Out from the ship's centre through the part's own, jittered.
+        vec3_t const  j     = v3(hash01(i, seed) - 0.5f, hash01(i, seed + 1u) - 0.5f, hash01(i, seed + 2u) - 0.5f);
+        vec3_t const  out   = v3_norm(v3_add(c, v3_scale(j, 0.6f)));
+        float const   sp    = DEBRIS_SPEED_MIN + (DEBRIS_SPEED_MAX - DEBRIS_SPEED_MIN) * hash01(i, seed + 3u);
+        vec3_t const  k     = v3_norm(v3(hash01(i, seed + 4u) - 0.5f, hash01(i, seed + 5u) - 0.5f, 0.3f));
+        mat3_t const  rot   = mat3_axis_angle(k, DEBRIS_SPIN_MAX * (hash01(i, seed + 6u) - 0.5f) * u);
+        // world(p) = at(c + R (p - c)) + motion: as an xform, r = at.r R and
+        // the translation carries at.r (c - R c).
+        mat3_t const  r     = mat3_mul(&at->r, &rot);
+        vec3_t const  pivot = v3_scale(v3_sub(c, mat3_apply(&rot, c)), at->scale);
+        vec3_t const  fly   = v3_add(v3_scale(vel, u), v3_scale(mat3_apply(&at->r, out), sp * at->scale * u));
+        xform_t const x     = {r, v3_add(v3_add(at->pos, mat3_apply(&at->r, pivot)), fly), at->scale};
+        mesh_submit_part(&s_mesh, i, &x, s_mats[livery], MARAUDER_MAT_COUNT);
     }
 }
 

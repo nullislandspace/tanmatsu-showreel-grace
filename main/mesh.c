@@ -329,6 +329,214 @@ void mesh_loft(mesh_t* m, int n_sec, int n_pts, float const z[], float const (*x
     part_add(m, part_v0, part_t0);
 }
 
+void mesh_stroke(mesh_t* m, int n, float const (*pts)[2], bool closed, float width, float z0, float z1,
+                 uint8_t mat_face, uint8_t mat_side, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
+    if (n < 2 || n > MESH_STROKE_MAX_PTS || (closed && n < 3)) {
+        m->failed = true;
+        return;
+    }
+    int const   segs = closed ? n : n - 1;
+    float const half = 0.5f * width;
+
+    // Left normal (+90 degrees) of segment k, from point k to point k+1.
+    float nx[MESH_STROKE_MAX_PTS], ny[MESH_STROKE_MAX_PTS], len[MESH_STROKE_MAX_PTS];
+    for (int k = 0; k < segs; k++) {
+        int const   j  = (k + 1) % n;
+        float const dx = pts[j][0] - pts[k][0], dy = pts[j][1] - pts[k][1];
+        len[k]        = sqrtf(dx * dx + dy * dy);
+        float const l = len[k] > 1e-9f ? len[k] : 1.0f;
+        nx[k]         = -dy / l;
+        ny[k]         = dx / l;
+    }
+
+    // Per point: its left and right offset, at z0 and z1. At a joint the
+    // offset is the mitre (the bisector, lengthened so both sides stay
+    // `half` from their segment); at an open end, straight across.
+    int const base = m->vn;
+    for (int i = 0; i < n; i++) {
+        int const in  = closed ? (i + n - 1) % n : i - 1;   // segment arriving at i
+        int const out = closed ? i : (i < n - 1 ? i : -1);  // segment leaving i
+        float     ox, oy;
+        if (in >= 0 && out >= 0) {
+            float       bx = nx[in] + nx[out], by = ny[in] + ny[out];
+            float const bl  = sqrtf(bx * bx + by * by);
+            bx             /= bl;
+            by             /= bl;
+            float const s   = half / (bx * nx[out] + by * ny[out]);
+            ox              = bx * s;
+            oy              = by * s;
+        } else {
+            int const k = in >= 0 ? in : out;
+            ox          = nx[k] * half;
+            oy          = ny[k] * half;
+        }
+        float const x = pts[i][0], y = pts[i][1];
+        mesh_vert(m, v3(x + ox, y + oy, z0));  // base + 4i + 0: left, z0
+        mesh_vert(m, v3(x - ox, y - oy, z0));  //            + 1: right, z0
+        mesh_vert(m, v3(x + ox, y + oy, z1));  //            + 2: left, z1
+        mesh_vert(m, v3(x - ox, y - oy, z1));  //            + 3: right, z1
+    }
+
+    float s0 = 0.0f;  // path length so far, for the sides' u
+    for (int k = 0; k < segs; k++) {
+        int const    a = base + 4 * k, b = base + 4 * ((k + 1) % n);
+        vec3_t const left = v3(nx[k], ny[k], 0.0f), right = v3(-nx[k], -ny[k], 0.0f);
+        quad_planar(m, a + 0, b + 0, b + 1, a + 1, mat_face, rep, v3(0.0f, 0.0f, -1.0f));
+        quad_planar(m, a + 2, b + 2, b + 3, a + 3, mat_face, rep, v3(0.0f, 0.0f, 1.0f));
+        float const u0 = s0 / rep, u1 = (s0 + len[k]) / rep;
+        float const sl[4][2] = {{u0, z0 / rep}, {u1, z0 / rep}, {u1, z1 / rep}, {u0, z1 / rep}};
+        quad_out(m, a + 0, b + 0, b + 2, a + 2, mat_side, sl, left);
+        quad_out(m, a + 1, b + 1, b + 3, a + 3, mat_side, sl, right);
+        s0 += len[k];
+    }
+    if (!closed) {
+        // End caps, facing back along the first segment and on along the
+        // last.
+        int const    a = base, b = base + 4 * (n - 1);
+        // The direction of travel is (ny, -nx) (the left normal turned back).
+        vec3_t const back = v3(-ny[0], nx[0], 0.0f), fwd = v3(ny[segs - 1], -nx[segs - 1], 0.0f);
+        float const  cu        = width / rep;
+        float const  cap[4][2] = {{0.0f, z0 / rep}, {cu, z0 / rep}, {cu, z1 / rep}, {0.0f, z1 / rep}};
+        quad_out(m, a + 0, a + 1, a + 3, a + 2, mat_side, cap, back);
+        quad_out(m, b + 0, b + 1, b + 3, b + 2, mat_side, cap, fwd);
+    }
+    part_add(m, part_v0, part_t0);
+}
+
+void mesh_sphere(mesh_t* m, float r, int segs, int rings, uint8_t mat) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
+    if (segs < 3 || rings < 2) {
+        m->failed = true;
+        return;
+    }
+    // Poles, then the (rings - 1) latitude circles of `segs` points.
+    int const north = mesh_vert(m, v3(0.0f, r, 0.0f));
+    int const south = mesh_vert(m, v3(0.0f, -r, 0.0f));
+    int const base  = m->vn;
+    for (int j = 1; j < rings; j++) {
+        float const lat = (float)M_PI * (float)j / (float)rings;  // from the north pole
+        for (int k = 0; k < segs; k++) {
+            float const lon = 2.0f * (float)M_PI * (float)k / (float)segs;
+            mesh_vert(m, v3(r * sinf(lat) * sinf(lon), r * cosf(lat), r * sinf(lat) * cosf(lon)));
+        }
+    }
+    // u per corner from the segment index, so the seam at u = 1 needs no
+    // duplicate vertex: the last segment runs to u = 1, not back to 0.
+    for (int k = 0; k < segs; k++) {
+        int const   n  = (k + 1) % segs;
+        float const u0 = (float)k / (float)segs, u1 = (float)(k + 1) / (float)segs, um = 0.5f * (u0 + u1);
+        float const v1 = 1.0f / (float)rings, vl = (float)(rings - 1) / (float)rings;
+        int const   a = base + k, b = base + n;
+        float const uvn[3][2] = {{um, 0.0f}, {u0, v1}, {u1, v1}};
+        tri_out(m, north, a, b, mat, uvn, v3_add(v3_add(m->v[north], m->v[a]), m->v[b]));
+        int const   la = base + (rings - 2) * segs + k, lb = base + (rings - 2) * segs + n;
+        float const uvs[3][2] = {{um, 1.0f}, {u0, vl}, {u1, vl}};
+        tri_out(m, south, la, lb, mat, uvs, v3_add(v3_add(m->v[south], m->v[la]), m->v[lb]));
+        for (int j = 0; j + 2 < rings; j++) {
+            int const   p = base + j * segs + k, q = base + j * segs + n;
+            int const   s = base + (j + 1) * segs + n, t = base + (j + 1) * segs + k;
+            float const va = (float)(j + 1) / (float)rings, vb = (float)(j + 2) / (float)rings;
+            float const uv[4][2] = {{u0, va}, {u1, va}, {u1, vb}, {u0, vb}};
+            quad_out(m, p, q, s, t, mat, uv, v3_add(v3_add(m->v[p], m->v[q]), v3_add(m->v[s], m->v[t])));
+        }
+    }
+    part_add(m, part_v0, part_t0);
+}
+
+// Index of the vertex half way along edge (a, b), made once and shared by
+// both triangles on the edge (a linear search: blobs are built once, at
+// startup, and have a few hundred edges).
+typedef struct {
+    int a, b, mid;
+} blob_edge_t;
+
+static int blob_mid(mesh_t* m, blob_edge_t* e, int* en, int a, int b) {
+    if (a > b) {
+        int const t = a;
+        a           = b;
+        b           = t;
+    }
+    for (int i = 0; i < *en; i++) {
+        if (e[i].a == a && e[i].b == b) return e[i].mid;
+    }
+    int const mid = mesh_vert(m, v3_norm(v3_add(m->v[a], m->v[b])));
+    e[(*en)++]    = (blob_edge_t){a, b, mid};
+    return mid;
+}
+
+#define BLOB_MAX_SUBDIV 3
+
+void mesh_blob(mesh_t* m, int subdiv, float (*radius)(vec3_t dir, void* user), void* user, uint8_t mat, float rep) {
+    int const part_v0 = m->vn, part_t0 = m->tn;
+    if (subdiv < 0 || subdiv > BLOB_MAX_SUBDIV) {
+        m->failed = true;
+        return;
+    }
+    // The icosahedron on the unit sphere.
+    float const      p             = 1.6180340f;  // golden ratio
+    float const      ico[12][3]    = {{-1, p, 0},  {1, p, 0},  {-1, -p, 0}, {1, -p, 0}, {0, -1, p},  {0, 1, p},
+                                      {0, -1, -p}, {0, 1, -p}, {p, 0, -1},  {p, 0, 1},  {-p, 0, -1}, {-p, 0, 1}};
+    static int const faces0[20][3] = {{0, 11, 5}, {0, 5, 1},  {0, 1, 7},   {0, 7, 10}, {0, 10, 11},
+                                      {1, 5, 9},  {5, 11, 4}, {11, 10, 2}, {10, 7, 6}, {7, 1, 8},
+                                      {3, 9, 4},  {3, 4, 2},  {3, 2, 6},   {3, 6, 8},  {3, 8, 9},
+                                      {4, 9, 5},  {2, 4, 11}, {6, 2, 10},  {8, 6, 7},  {9, 8, 1}};
+    int const        base          = m->vn;
+    for (int i = 0; i < 12; i++) mesh_vert(m, v3_norm(v3(ico[i][0], ico[i][1], ico[i][2])));
+
+    // Subdivide on the unit sphere: every triangle into four.
+    int cap = 20;
+    for (int s = 0; s < subdiv; s++) cap *= 4;
+    int*         tri   = malloc(sizeof(int) * 3 * (size_t)cap);
+    int*         next  = malloc(sizeof(int) * 3 * (size_t)cap);
+    blob_edge_t* edges = malloc(sizeof(blob_edge_t) * (size_t)cap * 3 / 2 + 64);
+    if (tri == NULL || next == NULL || edges == NULL) {
+        free(tri);
+        free(next);
+        free(edges);
+        m->failed = true;
+        return;
+    }
+    int tn = 20;
+    for (int i = 0; i < 20; i++) {
+        for (int k = 0; k < 3; k++) tri[i * 3 + k] = base + faces0[i][k];
+    }
+    for (int s = 0; s < subdiv; s++) {
+        int en = 0, nn = 0;
+        for (int i = 0; i < tn; i++) {
+            int const a = tri[i * 3], b = tri[i * 3 + 1], c = tri[i * 3 + 2];
+            int const ab = blob_mid(m, edges, &en, a, b), bc = blob_mid(m, edges, &en, b, c);
+            int const ca      = blob_mid(m, edges, &en, c, a);
+            int const q[4][3] = {{a, ab, ca}, {b, bc, ab}, {c, ca, bc}, {ab, bc, ca}};
+            for (int k = 0; k < 4; k++) {
+                next[nn * 3] = q[k][0], next[nn * 3 + 1] = q[k][1], next[nn * 3 + 2] = q[k][2];
+                nn++;
+            }
+        }
+        int* t = tri;
+        tri    = next;
+        next   = t;
+        tn     = nn;
+        if (m->failed) break;  // out of memory: mesh_vert returned -1
+    }
+    if (m->failed) {
+        free(tri);
+        free(next);
+        free(edges);
+        return;
+    }
+    // Push every vertex out to its radius, then emit, facing out.
+    for (int i = base; i < m->vn; i++) m->v[i] = v3_scale(m->v[i], radius(m->v[i], user));
+    for (int i = 0; i < tn; i++) {
+        int const a = tri[i * 3], b = tri[i * 3 + 1], c = tri[i * 3 + 2];
+        tri_planar(m, a, b, c, mat, rep, v3_add(v3_add(m->v[a], m->v[b]), m->v[c]));
+    }
+    free(tri);
+    free(next);
+    free(edges);
+    part_add(m, part_v0, part_t0);
+}
+
 void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_side, uint8_t mat_base, float rep) {
     int const part_v0 = m->vn, part_t0 = m->tn;
     int const base = m->vn;

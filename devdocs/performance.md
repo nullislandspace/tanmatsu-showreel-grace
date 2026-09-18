@@ -253,6 +253,14 @@ right marauder fills half the screen, so this scene has the least headroom.
 191.6 s, i.e. about 7x slower than real time. Per frame: JPEG encode ~200 ms,
 SD write ~23 ms, 12–30 KB.
 
+**Asset viewer, full-reel assets** (`perf scene=assets secs=96`, 8 s per asset): rast per
+shot in ms (30 fps unless noted): player 8.2, marauder 9.9, station 14.8, title 6.9 (~490
+textured tris), planet 19.3 (a 290 px disc), asteroids 13.1 (563 textured tris, the most),
+warp 0.4, explosion 3.2 (peak 24), dust 3.6, **planet base 60 (15 fps)**. The base is
+fill-bound: the textured apron covers ~800×250 px from the viewer's orbit. Textured fill
+runs at roughly 5 Mpx/s, so a screen-sized textured layer costs ~50 ms whatever the triangle
+count. Only what the PPA paints is free.
+
 **Sky/ground backdrop** (`perf scene=horizon`, the dev scene, 12 s): 30 fps throughout.
 `wait` (the PPA fills plus the CPU's share) is 2.5 ms with the camera level: two fills,
 where the space backdrop's one full-screen fill leaves ~1.8 ms. While the camera rolls

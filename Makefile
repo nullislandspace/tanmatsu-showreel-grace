@@ -258,12 +258,14 @@ textures:
 # closed, consistently wound, outward-facing parts; no badge needed. Asset
 # generators that build meshes add their pure *_mesh.c file here.
 HOSTCC ?= cc
-MESHCHECK_SRCS := tools/meshcheck.c main/mesh.c main/xform.c main/assets/station_mesh.c main/assets/marauder_mesh.c
+MESHCHECK_SRCS := tools/meshcheck.c main/mesh.c main/xform.c main/assets/station_mesh.c main/assets/marauder_mesh.c \
+                  main/assets/title_text_mesh.c main/assets/planet_base_mesh.c main/assets/asteroid_mesh.c
 
 .PHONY: meshcheck
 meshcheck:
 	mkdir -p $(BUILD)/host
-	$(HOSTCC) -O1 -Wall -Wextra -DMESH_HOST -Imain -Itools $(MESHCHECK_SRCS) -lm -o $(BUILD)/host/meshcheck
+	$(HOSTCC) -O1 -Wall -Wextra -Werror=implicit-function-declaration -DMESH_HOST -Imain -Itools $(MESHCHECK_SRCS) -lm \
+	  -o $(BUILD)/host/meshcheck
 	$(BUILD)/host/meshcheck
 
 # Host-side check of every scene (tools/scenecheck.c): runs the real scene
@@ -272,7 +274,8 @@ meshcheck:
 # needed. SCENES="name ..." checks only those; SCENECHECK_FLAGS=-v lists
 # every clipped frame. mesh_render.c is built on its own, with its
 # mesh_submit / mesh_submit_part renamed, so the checker can wrap them.
-SCENECHECK_CFLAGS := -O2 -Wall -Wextra -DMESH_HOST -Itools/host -Itools -Imain -Isynthengine3D/include
+SCENECHECK_CFLAGS := -O2 -Wall -Wextra -Werror=implicit-function-declaration -DMESH_HOST -Itools/host -Itools -Imain \
+                     -Isynthengine3D/include
 SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c main/mesh.c main/camera.c main/horizon.c \
                      $(wildcard main/assets/*.c) $(wildcard main/scenes/*.c)
 
