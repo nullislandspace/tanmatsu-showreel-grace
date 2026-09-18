@@ -6,6 +6,8 @@
 //  here, and its source file to MESHCHECK_SRCS in the Makefile.
 // =====================================================================
 
+#include "assets/marauder_mesh.h"
+#include "assets/station_mesh.h"
 #include "objects/ship_model.h"
 
 // The vendored player ship, straight from its header. Informational
@@ -32,4 +34,15 @@ static void check_player_ship_model(void) {
 
 static void check_assets(void) {
     check_player_ship_model();
+
+    mesh_t m;
+    station_build_mesh(&m);
+    // Hub, docking port, 8 spokes, ring: 11 closed parts.
+    CHECK(check_mesh("station", &m, true) == 3 + STATION_SPOKES, "station: expected %d parts", 3 + STATION_SPOKES);
+    mesh_free(&m);
+
+    marauder_build_mesh(&m);
+    // Fuselage, canopy, and per side: wing, fin, nacelle, gun.
+    CHECK(check_mesh("marauder", &m, true) == 2 + 2 * 4, "marauder: expected 10 parts");
+    mesh_free(&m);
 }

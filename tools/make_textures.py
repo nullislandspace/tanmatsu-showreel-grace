@@ -25,11 +25,12 @@ OUT = Path(__file__).resolve().parent.parent / "textures"
 rng = np.random.default_rng(0x5E3D)
 
 
-def periodic_noise(sx, sy):
+def periodic_noise(sx, sy, gen=None):
     """Tileable noise: white noise low-passed with a Gaussian in the FFT
     domain (convolution there is circular, so the result wraps). sx/sy
-    are the blur radii in texels; unequal radii give streaks."""
-    white = rng.standard_normal((N, N))
+    are the blur radii in texels; unequal radii give streaks. `gen` is
+    the random generator (default: the shared one of the hull plates)."""
+    white = (gen or rng).standard_normal((N, N))
     fy = np.fft.fftfreq(N)[:, None]
     fx = np.fft.fftfreq(N)[None, :]
     g = np.exp(-2 * (np.pi ** 2) * ((fx * sx) ** 2 + (fy * sy) ** 2))
@@ -143,12 +144,119 @@ def flame():
     return np.clip(img, 0, 255).astype(np.uint8)
 
 
+# --- Station and marauder textures -----------------------------------
+#
+# Their own generator, so adding them left the hull plates above (which
+# share `rng`, in order) byte-identical.
+rng2 = np.random.default_rng(0x57A7)
+
+
+def panel_grid(lum, step, dark=-34, light=14):
+    """Panel seams every `step` texels (tileable when step divides N)."""
+    for k in range(0, N, step):
+        lum[k, :] += dark
+        lum[:, k] += dark
+        lum[(k + 1) % N, :] += light
+        lum[:, (k + 1) % N] += light
+
+
+def station_hull():
+    """Station hub and faces: the 2001 station's off-white, large panels
+    (two per tile each way), soft mottling and a few small dark vents."""
+    lum = 5 * periodic_noise(7, 7, rng2) + 2 * periodic_noise(1.5, 1.5, rng2)
+    panel_grid(lum, 32)
+    for _ in range(5):
+        x0, y0 = rng2.integers(2, N - 8, 2)
+        w, h = rng2.integers(3, 7), rng2.integers(2, 4)
+        lum[y0:y0 + h, x0:x0 + w] -= 70
+        lum[y0 + h, x0:x0 + w] += 20      # lit lower lip
+    return to_rgb(lum, (200, 202, 204))
+
+
+def station_ring():
+    """Ring walls: the hull panelling with a band of lit windows across
+    the middle -- read as habitation. (Lit only by the scene light, not
+    emissive: on the night side the windows go dark with the wall.)"""
+    lum = 5 * periodic_noise(7, 7, rng2)
+    panel_grid(lum, 32)
+    img = to_rgb(lum, (198, 200, 202)).astype(int)
+    band = slice(26, 38)
+    img[band, :, :] = (img[band, :, :] * 0.35).astype(int)      # dark window band
+    for x in range(2, N, 8):                                     # 8 windows per tile
+        on = rng2.random() < 0.8
+        col = (255, 226, 150) if on else (60, 66, 80)
+        img[29:35, x:x + 4, :] = col
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def marauder_wear():
+    """Shared by both marauder liveries, so the two ships are visibly the
+    same type: panel seams, grime (a luminance field) and a mask of where
+    the paint is scratched or chipped down to bare metal."""
+    grime = 16 * periodic_noise(5, 5, rng2) + 6 * periodic_noise(1.2, 1.2, rng2)
+    panel_grid(grime, 16, dark=-40, light=10)
+    bare = np.zeros((N, N), bool)
+    for _ in range(9):                                   # scratches
+        x0, y0 = rng2.integers(0, N, 2)
+        length = rng2.integers(6, 20)
+        dx = rng2.choice([-1, 1])
+        for i in range(length):
+            bare[(y0 + i // 2) % N, (x0 + dx * i) % N] = True
+    chips = periodic_noise(2.2, 2.2, rng2) > 0.55        # chipped patches
+    return grime, bare | chips
+
+
+_WEAR = None
+
+
+def marauder(paint):
+    global _WEAR
+    if _WEAR is None:
+        _WEAR = marauder_wear()
+    grime, bare = _WEAR
+    img = to_rgb(grime, paint).astype(int)
+    metal = to_rgb(grime * 0.6, (128, 130, 134)).astype(int)
+    img[bare] = metal[bare]
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
+def marauder_green():
+    """Marauder #1: old, dirty green paint."""
+    return marauder((70, 94, 56))
+
+
+def marauder_yellow():
+    """Marauder #2: darkened, sooty yellow."""
+    return marauder((150, 124, 38))
+
+
+def flame_red():
+    """Marauder engine flame, 64x8: the counterpart of flame(), running
+    white-hot -> orange -> deep red."""
+    w, h = 64, 8
+    stops = [(0.00, (255, 246, 222)), (0.15, (255, 196, 96)), (0.40, (255, 112, 32)),
+             (0.75, (196, 38, 16)), (1.00, (92, 12, 8))]
+    xs = np.linspace(0.0, 1.0, w)
+    ramp = np.zeros((w, 3))
+    for c in range(3):
+        ramp[:, c] = np.interp(xs, [p for p, _ in stops], [col[c] for _, col in stops])
+    streak = np.array([1.00, 0.90, 1.06, 0.94, 1.00, 0.88, 1.05, 0.95])[:, None, None]
+    fade = np.clip((xs - 0.12) / 0.3, 0.0, 1.0)[None, :, None]
+    img = ramp[None, :, :] * (1.0 + (streak - 1.0) * fade)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
 TEXTURES = {
     "plate_riveted.png": riveted,
     "plate_brushed.png": brushed,
     "plate_gunmetal.png": gunmetal,
     "plate_tread.png": tread,
     "flame.png": flame,
+    "station_hull.png": station_hull,
+    "station_ring.png": station_ring,
+    "marauder_green.png": marauder_green,
+    "marauder_yellow.png": marauder_yellow,
+    "flame_red.png": flame_red,
 }
 
 

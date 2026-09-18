@@ -21,9 +21,9 @@ typedef enum {
 
 #define FLAME_SIDES 6
 
-// Load the flame textures from `asset_dir`. Idempotent. A missing
-// texture is logged and that style falls back to a flat colour.
-void flame_init(char const* asset_dir);
+// Fetch the flame textures (texcache). Idempotent. A missing texture is
+// logged and that style falls back to a flat colour.
+void flame_init(void);
 void flame_shutdown(void);
 
 // One flame on the ship posed by `x`: base centred on `nozzle` (model

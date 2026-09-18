@@ -16,9 +16,17 @@ set(APP_SOURCES
     main/camera.c
     main/mesh.c
     main/mesh_render.c
+    main/assets/texcache.c
     main/assets/flame.c
     main/assets/player_ship.c
+    main/assets/starfield.c
+    main/assets/station_mesh.c
+    main/assets/station.c
+    main/assets/marauder_mesh.c
+    main/assets/marauder.c
+    main/assets/laser.c
     main/scenes/turntable.c
+    main/scenes/asset_viewer.c
     main/profile.c
     main/screenshot.c
     main/report.c

@@ -246,7 +246,7 @@ textures:
 # closed, consistently wound, outward-facing parts; no badge needed. Asset
 # generators that build meshes add their pure *_mesh.c file here.
 HOSTCC ?= cc
-MESHCHECK_SRCS := tools/meshcheck.c main/mesh.c main/xform.c
+MESHCHECK_SRCS := tools/meshcheck.c main/mesh.c main/xform.c main/assets/station_mesh.c main/assets/marauder_mesh.c
 
 .PHONY: meshcheck
 meshcheck:

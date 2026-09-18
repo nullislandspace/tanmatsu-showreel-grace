@@ -245,12 +245,12 @@ The spokes reuse `plate_gunmetal.png`.
 | 4.7 | Automated regression: `testcompare` turntable shots **bit-identical** to the 3.4 refs; perf within noise of 3.4 | done | The turntable shots are bit-identical to the 3.4 refs (`--compare`: 3× identical). Perf 20 s: rast 11.52 ms mean (11.44 before), submit 1.01 ms (0.97), 30 fps, SRAM 152/62 KiB |
 | 4.8 | Automated clip test: a dev scene `scenes/test_nearclip.c` (camera sweeping through a textured box and lines) → shots reviewed for smearing, with refs captured | skipped (folded into 6.5) | Judging smearing needs an image (slow download, D-21). The flyby's chase through the spokes exercises clipping in real content; one image will be checked there |
 | **5** | **Asset generators** | | |
-| 5.1 | Textures: `station_hull`, `station_ring`, `marauder_green`, `marauder_yellow`, `flame_red`; contact sheet; `metadata.json` | todo | |
-| 5.2 | `assets/starfield.c` | todo | |
-| 5.3 | `assets/station.c` (passes meshcheck) | todo | |
-| 5.4 | `assets/marauder.c`, one type, green/yellow liveries, red flames (passes meshcheck) | todo | |
-| 5.5 | `assets/laser.c` | todo | |
-| 5.6 | `scenes/asset_viewer.c` (unused dev scene, t-driven orbit per asset); automated shots of each asset → review; tune | todo | |
+| 5.1 | Textures: `station_hull`, `station_ring`, `marauder_green`, `marauder_yellow`, `flame_red`; contact sheet; `metadata.json` | done | 5 textures (own RNG `rng2`, so the existing 5 PNGs stay byte-identical); contact sheet checked; `metadata.json` |
+| 5.2 | `assets/starfield.c` | done | 600 stars (40% in a tilted band), power-law brightness, tints; `scene_point` at eye + dir·1000 |
+| 5.3 | `assets/station.c` (passes meshcheck) | done | `station_mesh.c` (pure) + `station.c`: hub, docking port, 8 spokes, ring (48 segs); 592 tris, 11 closed parts (meshcheck); the window band is centred by building the ring at z 0..depth, then shifting it |
+| 5.4 | `assets/marauder.c`, one type, green/yellow liveries, red flames (passes meshcheck) | done | `marauder_mesh.c` + `marauder.c`: lofted fuselage, delta wings, fins, nacelles, guns; 220 tris, 10 closed parts; liveries swap only the paint texture; red flames; `marauder_gun()` for lasers. New `mesh_loft` builder (tested in meshcheck, including clockwise input) |
+| 5.5 | `assets/laser.c` | done | `laser_submit_bolt(muzzle, dir, age, style)`: a pure function of age (speed 60, length 2, lifetime 1.2 s) |
+| 5.6 | `scenes/asset_viewer.c` (unused dev scene, t-driven orbit per asset); automated shots of each asset → review; tune | done | `scenes/asset_viewer.c` (`assets`, 4 named shots × 8 s, not in the playlist). Perf per asset: F-19. Two frames fetched (marauder green at 12 s, station at 28 s): geometry, livery, red flames and stars correct. Tuning noted: the marauder paint repeat is dense (graph-paper look); the ring's window band only shows from oblique views |
 | **6** | **Scene `spacestation_flyby`** | | |
 | 6.1 | World layout, light, station phase solved so a gap is centred at t_cross | todo | |
 | 6.2 | Paths (player through the gap; marauders round the ring, then converge), orientation, bank, jink | todo | |
@@ -319,6 +319,12 @@ The spokes reuse `plate_gunmetal.png`.
   - A per-byte echo in the app deadlocked the chain: app TX blocks, the proxy spins on a tty write without reading, the runner blocks in `write`. It was removed.
   - A hard reset sometimes boots the launcher instead of the app, so `--reset` is opt-in.
   - The whole shot test takes ~16 s, hands-free.
+- **F-19** 2026-09-18, per-asset cost (`perf scene=assets secs=32`, each asset alone, orbit camera):
+  - player: rast 8.1 ms, 96 + 64 tris;
+  - marauder: 9.8 ms, 21 + 87;
+  - station at 62 units: 14.8 ms, 12 + 273 textured.
+  All at 30 fps, SRAM 152/62 KiB. The point list lands in PSRAM (16 KB).
+  Also added `assets/texcache.c` (textures shared between assets; the flames moved to it).
 
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.

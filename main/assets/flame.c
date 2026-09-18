@@ -4,12 +4,9 @@
 
 #include "assets/flame.h"
 #include <stdbool.h>
-#include <stdio.h>
+#include "assets/texcache.h"
 #include "camera.h"
-#include "esp_log.h"
 #include "synthengine3d.h"
-
-static char const TAG[] = "flame";
 
 // Texture u at the tip. Short of 1.0 so no pixel near the tip rounds up
 // into the next repeat and wraps back to the white-hot nozzle colour.
@@ -33,29 +30,18 @@ static flame_style_def_t const STYLES[FLAME_STYLE_COUNT] = {
     [FLAME_RED]  = {"flame_red.png", 0xFFFF4020u},
 };
 
-// Textures stay in PSRAM for now (see devdocs/performance.md: internal
-// SRAM would save ~4% of the textured pass).
-#define FLAME_TEXTURE_FLAGS 0
+static se_texture_t const* s_tex[FLAME_STYLE_COUNT];
+static bool                s_ready;
 
-static se_texture_t* s_tex[FLAME_STYLE_COUNT];
-static bool          s_ready;
-
-void flame_init(char const* asset_dir) {
+void flame_init(void) {
     if (s_ready) return;
-    for (int i = 0; i < FLAME_STYLE_COUNT; i++) {
-        char path[256];
-        snprintf(path, sizeof(path), "%s/%s", asset_dir ? asset_dir : ".", STYLES[i].file);
-        s_tex[i] = se_texture_load(path, FLAME_TEXTURE_FLAGS);
-        if (s_tex[i] == NULL) ESP_LOGW(TAG, "%s missing -- that flame is drawn flat", STYLES[i].file);
-    }
+    for (int i = 0; i < FLAME_STYLE_COUNT; i++) s_tex[i] = texcache_get(STYLES[i].file);
     s_ready = true;
 }
 
 void flame_shutdown(void) {
-    for (int i = 0; i < FLAME_STYLE_COUNT; i++) {
-        se_texture_unload(s_tex[i]);
-        s_tex[i] = NULL;
-    }
+    // The textures belong to the cache (texcache_shutdown).
+    for (int i = 0; i < FLAME_STYLE_COUNT; i++) s_tex[i] = NULL;
     s_ready = false;
 }
 

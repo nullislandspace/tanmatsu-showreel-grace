@@ -23,7 +23,12 @@
         {"source_file": "plate_brushed.png", "target_file": "plate_brushed.png"},
         {"source_file": "plate_gunmetal.png", "target_file": "plate_gunmetal.png"},
         {"source_file": "plate_tread.png", "target_file": "plate_tread.png"},
-        {"source_file": "flame.png", "target_file": "flame.png"}
+        {"source_file": "flame.png", "target_file": "flame.png"},
+        {"source_file": "station_hull.png", "target_file": "station_hull.png"},
+        {"source_file": "station_ring.png", "target_file": "station_ring.png"},
+        {"source_file": "marauder_green.png", "target_file": "marauder_green.png"},
+        {"source_file": "marauder_yellow.png", "target_file": "marauder_yellow.png"},
+        {"source_file": "flame_red.png", "target_file": "flame_red.png"}
       ]
     }
   ]

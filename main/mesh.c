@@ -248,6 +248,54 @@ void mesh_ring(mesh_t* m, float r_in, float r_out, float z0, float z1, int segs,
     }
 }
 
+void mesh_loft(mesh_t* m, int n_sec, int n_pts, float const z[], float const (*xy)[MESH_LOFT_MAX_PTS][2],
+               uint8_t mat_side, uint8_t mat_cap, float rep) {
+    if (n_sec < 2 || n_pts < 3 || n_pts > MESH_LOFT_MAX_PTS) {
+        m->failed = true;
+        return;
+    }
+    int const base = m->vn;
+    for (int k = 0; k < n_sec; k++) {
+        for (int i = 0; i < n_pts; i++) mesh_vert(m, v3(xy[k][i][0], xy[k][i][1], z[k]));
+    }
+    // Section centroids: the outward direction of a side face is away
+    // from the axis through them.
+    vec3_t cen[2];
+    for (int k = 0; k + 1 < n_sec; k++) {
+        for (int e = 0; e < 2; e++) {
+            float sx = 0.0f, sy = 0.0f;
+            for (int i = 0; i < n_pts; i++) {
+                sx += xy[k + e][i][0];
+                sy += xy[k + e][i][1];
+            }
+            cen[e] = v3(sx / (float)n_pts, sy / (float)n_pts, z[k + e]);
+        }
+        for (int i = 0; i < n_pts; i++) {
+            int const    n = (i + 1) % n_pts;
+            int const    a = base + k * n_pts + i, b = base + k * n_pts + n;
+            int const    c = base + (k + 1) * n_pts + n, d = base + (k + 1) * n_pts + i;
+            // Outward: from the axis to the middle of the face.
+            vec3_t const mid = v3_scale(v3_add(v3_add(m->v[a], m->v[b]), v3_add(m->v[c], m->v[d])), 0.25f);
+            vec3_t const ax  = v3_lerp(cen[0], cen[1], 0.5f);
+            vec3_t       out = v3_sub(mid, ax);
+            out.z            = 0.0f;
+            // u: running length round the section; v: z.
+            float const u0 = (float)i / (float)n_pts * 4.0f, u1 = (float)(i + 1) / (float)n_pts * 4.0f;
+            float const uv[4][2] = {{u0, z[k] / rep}, {u1, z[k] / rep}, {u1, z[k + 1] / rep}, {u0, z[k + 1] / rep}};
+            quad_out(m, a, b, c, d, mat_side, uv, out);
+        }
+    }
+    // Caps, as fans from each end section's first point (sections are
+    // convex).
+    for (int e = 0; e < 2; e++) {
+        int const    k   = e ? n_sec - 1 : 0;
+        vec3_t const out = v3(0.0f, 0.0f, e ? 1.0f : -1.0f);
+        for (int i = 1; i + 1 < n_pts; i++) {
+            tri_planar(m, base + k * n_pts, base + k * n_pts + i, base + k * n_pts + i + 1, mat_cap, rep, out);
+        }
+    }
+}
+
 void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_side, uint8_t mat_base, float rep) {
     int const base = m->vn;
     for (int k = 0; k < sides; k++) mesh_vert(m, rim(r, z0, k, sides));

@@ -76,6 +76,17 @@ void mesh_ring(mesh_t* m, float r_in, float r_out, float z0, float z1, int segs,
 // (either direction), `sides` facets, base capped.
 void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_side, uint8_t mat_base, float uv_repeat);
 
+// Loft: `n_sec` cross-sections of `n_pts` points each, section k lying
+// in the plane z = z[k] (z strictly increasing), joined side to side and
+// capped at both ends. Point i of every section is (xy[k][i][0],
+// xy[k][i][1]); list each section's points counter-clockwise seen from
+// +z, and keep every section convex around (cx, cy) = its own centroid.
+// A section may be tiny (a near-point nose) but must not be degenerate.
+// Sides map u round the section, v along z; caps map planar.
+#define MESH_LOFT_MAX_PTS 12
+void mesh_loft(mesh_t* m, int n_sec, int n_pts, float const z[], float const (*xy)[MESH_LOFT_MAX_PTS][2],
+               uint8_t mat_side, uint8_t mat_cap, float uv_repeat);
+
 // Signed volume of the triangles from index `first_tri` on (positive
 // for a closed outward-wound solid).
 float mesh_signed_volume(mesh_t const* m, int first_tri);

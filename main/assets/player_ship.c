@@ -158,7 +158,7 @@ static void build_mesh(void) {
 int player_ship_init(char const* asset_dir) {
     if (s_ready) return PLATE_COUNT;
     build_mesh();
-    flame_init(asset_dir);
+    flame_init();
 
     int loaded = 0;
     for (int p = 0; p < PLATE_COUNT; p++) {

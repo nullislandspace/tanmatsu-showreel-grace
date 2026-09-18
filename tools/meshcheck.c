@@ -254,6 +254,25 @@ static void check_primitives(void) {
     CHECK(caught_flip > 0, "checker missed a flipped face");
     CHECK(caught_inv > 0, "checker missed an inside-out solid");
 
+    // A loft: a pentagon section growing and shrinking along z, listed
+    // clockwise on purpose (the builder must fix the winding itself).
+    mesh_init(&m);
+    {
+        float const z[3] = {-1.0f, 0.2f, 1.5f};
+        float       xy[3][MESH_LOFT_MAX_PTS][2];
+        float const r[3] = {0.3f, 1.0f, 0.05f};
+        for (int k = 0; k < 3; k++) {
+            for (int i = 0; i < 5; i++) {
+                float const a = -(float)i * 2.0f * 3.14159265f / 5.0f;
+                xy[k][i][0]   = 0.2f + r[k] * cosf(a);
+                xy[k][i][1]   = -0.1f + 0.6f * r[k] * sinf(a);
+            }
+        }
+        mesh_loft(&m, 3, 5, z, (float const(*)[MESH_LOFT_MAX_PTS][2])xy, 0, 1, 1.0f);
+    }
+    check_mesh("loft (clockwise sections)", &m, true);
+    mesh_free(&m);
+
     // A rotated, translated, scaled part keeps its winding.
     mesh_init(&m);
     mesh_box(&m, v3(0, -0.5f, -0.5f), v3(10, 0.5f, 0.5f), 0, 1.0f);

@@ -5,6 +5,7 @@
 #include "reel.h"
 #include <stddef.h>
 #include <string.h>
+#include "assets/texcache.h"
 #include "esp_log.h"
 #include "scenes/scenes.h"
 #include "showtime.h"
@@ -14,6 +15,7 @@ static char const TAG[] = "reel";
 // Every scene there is (initialised at startup, selectable by name).
 static scene_def_t const* const ALL_SCENES[] = {
     &SCENE_TURNTABLE,
+    &SCENE_ASSET_VIEWER,
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
@@ -36,6 +38,7 @@ static void enter(scene_def_t const* sc) {
 }
 
 void reel_init(char const* asset_dir) {
+    texcache_init(asset_dir);
     for (size_t i = 0; i < ALL_N; i++) {
         if (ALL_SCENES[i]->init) ALL_SCENES[i]->init(asset_dir);
     }
@@ -47,6 +50,7 @@ void reel_shutdown(void) {
     for (size_t i = 0; i < ALL_N; i++) {
         if (ALL_SCENES[i]->shutdown) ALL_SCENES[i]->shutdown();
     }
+    texcache_shutdown();
 }
 
 void reel_next(void) {
