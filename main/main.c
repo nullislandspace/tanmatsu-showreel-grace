@@ -6,9 +6,10 @@
 //  device-global keys (volume, audio jack, F1 = launcher), vsync and the
 //  blit. This file is what a game plugs into that loop.
 //
-//  First reel item: the Race the Synth ship on a turntable against a
-//  black screen (see ship.c). Nothing else -- no floor, no horizon, no
-//  HUD -- so the mesh and the shading are all there is to look at.
+//  What is on screen is the reel's business (reel.h): a playlist of
+//  scenes (scenes/), each a pure function of the show clock
+//  (showtime.h), built from shared assets (assets/). This file only
+//  runs the frame: clock, backdrop, submit, rasterize, stats, keys.
 //
 //  The black is a PPA FILL, not a CPU clear. The framebuffers live in
 //  PSRAM, so se_run's default pax_background() clear would push 768 KB
@@ -22,50 +23,24 @@
 //  stays out; add it back before se_run() if that ever changes.
 // =====================================================================
 
-#include <math.h>
 #include <stdbool.h>
+#include "devtest.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "graceloader.h"
 #include "profile.h"
+#include "reel.h"
 #include "screenshot.h"
-#include "ship.h"
+#include "showtime.h"
 #include "synthengine3d.h"  // the whole engine public API
 
 static char const TAG[] = "showreel";
-
-// Eye on the z = 0 plane at height 0, looking straight down +z. The
-// ship frames itself against this (SHIP_CENTER_Y in ship.c), so moving
-// the camera means re-deriving that.
-#define CAM_X 0.0f
-#define CAM_Y 0.0f
 
 // Not handed to se_app_config_t.backdrop_argb: that field is only used
 // when no on_backdrop callback is registered, and this app registers
 // one. Alpha is ignored for an RGB565 target.
 #define BACKDROP_ARGB 0xFF000000u
-
-// --- Scene light ------------------------------------------------------
-//
-// One positional light (se_light.h), aimed relative to the hull's centre
-// rather than in absolute world coordinates, so it keeps its framing if
-// the ship's distance changes.
-//
-// Placed behind and to the left of the camera: start from the direction
-// the ship sees the camera in (straight back down -z), swing it 45 deg
-// to the left and lift it 20 deg above the horizontal plane through the
-// hull. At this distance the 45 deg swing carries it past the eye, so it
-// ends up behind the camera (negative z) as well as left of it -- a
-// three-quarter key light, which is what makes a faceted hull read as
-// solid instead of as a silhouette.
-#define LIGHT_AZIMUTH_DEG   45.0f  // left of the ship -> camera axis
-#define LIGHT_ELEVATION_DEG 20.0f  // above the plane through the hull
-#define LIGHT_DISTANCE      6.0f   // world units from the hull's centre
-// Directional share of the total illumination: 75% from the light, 25%
-// global. A face turned away from the light falls to a quarter of its
-// colour, so the faceting reads hard rather than softly modelled.
-#define LIGHT_BRIGHTNESS    0.75f
 
 // Same renderer for both halves of the split -- prepare builds what
 // rasterize consumes, so they must agree. One hull filling the screen
@@ -87,7 +62,7 @@ static bool s_shot_pending  = false;  // P pressed; capture at end of frame
 //   the phase split  -- per-frame ms for each prof_phase_t, the
 //                       engine's blit and vsync wait among them, plus
 //                       the unclaimed residual (profile.h), and
-//   the summary      -- FPS, the renderer, the last frame's rasterize
+//   the summary      -- FPS, the renderer, the scene[/shot], the last frame's rasterize
 //                       split (post-cull triangle / edge counts and their
 //                       wallclock), and internal SRAM.
 //
@@ -144,15 +119,19 @@ static void log_frame_stats(void) {
     scene_textured_stats(&ttri_n, &ttri_us);
 
     float const frame_ms = (float)elapsed / (1000.0f * (float)s_stats_frames);
-    char        phases[160];
+    float const fps      = (float)((double)s_stats_frames * 1000000.0 / (double)elapsed);
+    devtest_period(fps, frame_ms);
+    char phases[160];
     if (prof_flush(phases, sizeof(phases), frame_ms)) {
         ESP_LOGI(TAG, "  %.2f ms/frame:  %s", (double)frame_ms, phases);
     }
 
+    char const* const shot = reel_shot_name();
     ESP_LOGI(TAG,
-             "%.1f fps  %s  tris %d (%lld us)  ttris %d (%lld us)  lines %d (%lld us)  sram free %u KiB largest %u KiB",
-             (double)s_stats_frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), tri_n,
-             (long long)tri_us, ttri_n, (long long)ttri_us, line_n, (long long)line_us,
+             "%.1f fps  %s  [%s%s%s]  tris %d (%lld us)  ttris %d (%lld us)  lines %d (%lld us)  sram free %u KiB "
+             "largest %u KiB",
+             (double)s_stats_frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), reel_scene_name(),
+             shot[0] ? "/" : "", shot, tri_n, (long long)tri_us, ttri_n, (long long)ttri_us, line_n, (long long)line_us,
              (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
              (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
 
@@ -181,31 +160,17 @@ static void on_init(void* user) {
         ESP_LOGW(TAG, "PPA unavailable -- falling back to CPU backdrop clear");
     }
 
-    // Hull plate textures, from wherever graceloader started us (the SD
-    // card install, /sd/apps/at.cavac.showreel). After se_splash() so
-    // the splash's frames are not delayed by the file reads.
-    int const plates = ship_init(graceloader_get_install_basepath());
-    ESP_LOGI(TAG, "hull plates loaded: %d of 4", plates);
+    // Every scene and its assets (textures from wherever graceloader
+    // started us: the SD card install, /sd/apps/at.cavac.showreel). After
+    // se_splash() so the splash's frames are not delayed by the file
+    // reads, and so the splash keeps its own flat colours: each scene
+    // sets its own light when it is entered.
+    reel_init(graceloader_get_install_basepath());
 
-    // Aim the scene light. After se_splash() so the splash keeps its own
-    // flat colours, and once here rather than per frame -- neither the
-    // light nor the hull's centre moves (the ship spins in place).
-    float cx, cy, cz;
-    ship_center(&cx, &cy, &cz);
-    float const az = LIGHT_AZIMUTH_DEG * (float)M_PI / 180.0f;
-    float const el = LIGHT_ELEVATION_DEG * (float)M_PI / 180.0f;
-    float const h  = cosf(el);  // horizontal part of the unit direction
-    se_light_set(&(se_light_t){
-        .x          = cx - LIGHT_DISTANCE * h * sinf(az),
-        .y          = cy + LIGHT_DISTANCE * sinf(el),
-        .z          = cz - LIGHT_DISTANCE * h * cosf(az),
-        .brightness = LIGHT_BRIGHTNESS,
-        // The mesh is CCW-outward and ship.c culls its own back faces, so
-        // the cross-product normal already points at the camera and the
-        // flip is a no-op -- kept on because it costs one dot product and
-        // makes a mis-wound triangle light correctly rather than go dark.
-        .two_sided  = true,
-    });
+    // Debug console for the automated tests (devtest.h): idle unless the
+    // host sends a command, then it runs the test and returns to the
+    // launcher by itself.
+    devtest_start(stats_restart);
 
     // Output-neutral scene passes (both default OFF; see se_scene.h).
     // Frustum cull is a near-pure win. depth_order is an overdraw-
@@ -219,22 +184,37 @@ static void on_init(void* user) {
 }
 
 // Input events the engine did not consume itself (F1 and the volume
-// keys never get here). P latches a screenshot; it is taken at the end
-// of the frame, not here, so the file holds a finished image. Scancodes
-// arrive for release too, with BSP_INPUT_SCANCODE_RELEASE_MODIFIER set,
-// so the exact match below fires on the press only.
+// keys never get here). Scancodes arrive for release too, with
+// BSP_INPUT_SCANCODE_RELEASE_MODIFIER set, so the exact matches below
+// fire on the press only.
+//
+//   P   screenshot, taken at the end of the frame (not here) so the file
+//       holds a finished image
+//   N   next scene
 static void on_input(bsp_input_event_t const* ev, void* user) {
     (void)user;
-    if (ev->type == INPUT_EVENT_TYPE_SCANCODE && ev->args_scancode.scancode == BSP_INPUT_SCANCODE_P) {
-        s_shot_pending = true;
+    if (ev->type != INPUT_EVENT_TYPE_SCANCODE) return;
+    switch (ev->args_scancode.scancode) {
+        case BSP_INPUT_SCANCODE_P:
+            s_shot_pending = true;
+            break;
+        case BSP_INPUT_SCANCODE_N:
+            reel_next();
+            break;
+        default:
+            break;
     }
 }
 
-// Per-frame logic. dt is seconds since the previous frame, already
-// clamped by the engine to SE_FRAME_DT_MAX.
+// Per-frame logic: latch this frame's show time, then let the reel move
+// on if the current scene has run its course. The engine's dt is not
+// used: every scene is a function of the show clock, not of dt.
 static void on_update(float dt, void* user) {
     (void)user;
-    ship_update(dt);
+    (void)dt;
+    showtime_frame();
+    devtest_update();  // may steer the show clock (shot tests)
+    reel_frame();
 }
 
 // Start of frame. Enqueue the black FILL, then do every bit of CPU work
@@ -265,9 +245,8 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
     prof_end(PROF_FILL);
 
     prof_begin(PROF_SUBMIT);
-    render_set_camera(CAM_X, CAM_Y);
     scene_begin(fb);
-    ship_submit();
+    reel_submit();  // the scene sets its camera first, then submits
     prof_end(PROF_SUBMIT);
 
     prof_begin(PROF_PREPARE);
@@ -288,19 +267,25 @@ static void on_render(pax_buf_t* fb, void* user) {
     prof_end(PROF_WAIT);
 
     prof_begin(PROF_RASTER);
+    int64_t const rast_t0 = esp_timer_get_time();
     scene_rasterize(RENDER_MODE);
+    int64_t const rast_us = esp_timer_get_time() - rast_t0;
     prof_end(PROF_RASTER);
 
     // Last thing in the frame, so the capture is of the finished image.
-    // It blocks for as long as the SD write takes (about a second); the
-    // engine's dt clamp absorbs that, and the stats period is restarted
-    // so the stall does not land in the performance numbers.
+    // It blocks for as long as the SD write takes (about a second). That
+    // stall is taken out of the show clock, so the show resumes where it
+    // was instead of jumping a second ahead, and the stats period is
+    // restarted so it does not land in the performance numbers.
     if (s_shot_pending) {
-        s_shot_pending = false;
+        s_shot_pending   = false;
+        int64_t const t0 = esp_timer_get_time();
         screenshot_capture(fb);
+        showtime_exclude(esp_timer_get_time() - t0);
         stats_restart();
     }
 
+    devtest_after_render(fb, rast_us);
     log_frame_stats();
 }
 
@@ -309,7 +294,7 @@ static void on_render(pax_buf_t* fb, void* user) {
 // the textures have a matching unload.
 static void on_shutdown(void* user) {
     (void)user;
-    ship_shutdown();
+    reel_shutdown();
 }
 
 // Hand the loop to the engine. Does not return under graceloader: F1

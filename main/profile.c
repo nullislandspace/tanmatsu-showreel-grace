@@ -36,6 +36,17 @@ void prof_reset(void) {
     s_frames = 0;
 }
 
+int prof_snapshot(float ms[PROF_COUNT]) {
+    if (s_frames == 0) return 0;
+    float const inv = 1.0f / (1000.0f * (float)s_frames);
+    for (int i = 0; i < PROF_COUNT; i++) ms[i] = (float)s_acc[i] * inv;
+    return s_frames;
+}
+
+char const* prof_name(prof_phase_t p) {
+    return ((unsigned)p < PROF_COUNT) ? NAMES[p] : "?";
+}
+
 bool prof_flush(char* out, size_t n, float frame_ms) {
     if (out == NULL || n == 0) return false;
     if (s_frames == 0) return false;

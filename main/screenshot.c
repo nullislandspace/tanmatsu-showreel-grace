@@ -76,7 +76,16 @@ static bool next_path(char* out, size_t out_len) {
 }
 
 bool screenshot_capture(pax_buf_t* fb) {
-    if (fb == NULL) return false;
+    char path[64];
+    if (!next_path(path, sizeof(path))) {
+        ESP_LOGE(TAG, "no free filename in " SHOT_DIR);
+        return false;
+    }
+    return screenshot_capture_to(fb, path);
+}
+
+bool screenshot_capture_to(pax_buf_t* fb, char const* path) {
+    if (fb == NULL || path == NULL) return false;
 
     int const w = (int)pax_buf_get_width(fb);
     int const h = (int)pax_buf_get_height(fb);
@@ -96,14 +105,6 @@ bool screenshot_capture(pax_buf_t* fb) {
     uint8_t* const scratch        = heap_caps_malloc(batch_len + 8u, MALLOC_CAP_SPIRAM);
     if (buf == NULL || scratch == NULL) {
         ESP_LOGE(TAG, "out of PSRAM for a %ux%u capture", (unsigned)w, (unsigned)h);
-        heap_caps_free(buf);
-        heap_caps_free(scratch);
-        return false;
-    }
-
-    char path[64];
-    if (!next_path(path, sizeof(path))) {
-        ESP_LOGE(TAG, "no free filename in " SHOT_DIR);
         heap_caps_free(buf);
         heap_caps_free(scratch);
         return false;

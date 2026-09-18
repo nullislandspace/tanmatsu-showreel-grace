@@ -1,0 +1,23 @@
+{
+ "turntable_000000.png": {
+  "captured": "20260918T162005Z",
+  "engine": "2.0",
+  "fnv": "917cc34a",
+  "git": "0b3dd085dd-dirty",
+  "reason": "baseline-turntable"
+ },
+ "turntable_002500.png": {
+  "captured": "20260918T162005Z",
+  "engine": "2.0",
+  "fnv": "8e1a76ba",
+  "git": "0b3dd085dd-dirty",
+  "reason": "baseline-turntable"
+ },
+ "turntable_005000.png": {
+  "captured": "20260918T162005Z",
+  "engine": "2.0",
+  "fnv": "bc417d38",
+  "git": "0b3dd085dd-dirty",
+  "reason": "baseline-turntable"
+ }
+}

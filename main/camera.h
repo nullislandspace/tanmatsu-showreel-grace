@@ -1,0 +1,17 @@
+#pragma once
+// =====================================================================
+//  Showreel  --  scene camera helpers
+// ---------------------------------------------------------------------
+//  Thin wrappers over render_set_camera_6dof(). Call once per frame,
+//  first thing in a scene's submit: the engine transforms vertices into
+//  camera space as they are submitted, so the camera must be in place
+//  before any geometry goes in.
+// =====================================================================
+
+#include "xform.h"
+
+// Eye at `eye`, looking at `target`, rolled by `roll` radians.
+void camera_look_at(vec3_t eye, vec3_t target, float roll);
+
+// The current camera's eye position (for back-face culling).
+vec3_t camera_eye(void);

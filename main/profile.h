@@ -54,6 +54,14 @@ void prof_frame(void);
 // done before the clock started.
 void prof_reset(void);
 
+// Per-frame milliseconds for each phase over the period so far, without
+// resetting anything (call before prof_flush). Returns the number of
+// frames counted; `ms` is left untouched if that is 0.
+int prof_snapshot(float ms[PROF_COUNT]);
+
+// Short name of a phase ("fill", "rast", ...), as prof_flush prints it.
+char const* prof_name(prof_phase_t p);
+
 // Write a one-line summary of the last reporting period into `out` and
 // reset the accumulators: per-frame milliseconds for each phase, then
 // the residual against `frame_ms` as "rest". Returns false and writes

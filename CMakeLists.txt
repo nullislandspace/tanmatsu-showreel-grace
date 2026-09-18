@@ -10,17 +10,45 @@ project(app C)
 # App source files — add your .c files here
 set(APP_SOURCES
     main/main.c
-    main/ship.c
+    main/showtime.c
+    main/reel.c
+    main/xform.c
+    main/camera.c
+    main/mesh.c
+    main/mesh_render.c
+    main/assets/flame.c
+    main/assets/player_ship.c
+    main/scenes/turntable.c
     main/profile.c
     main/screenshot.c
+    main/report.c
+    main/debugcon.c
+    main/devtest.c
     main/crt0.c
 )
+
+# Build identity for the debug console's READY records: the git commit
+# (marked -dirty with uncommitted changes) and the build time. `make build`
+# re-runs cmake, so this is fresh on every build.
+execute_process(
+    COMMAND git describe --always --dirty --abbrev=10
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    OUTPUT_VARIABLE APP_GIT_HASH
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+)
+if(NOT APP_GIT_HASH)
+    set(APP_GIT_HASH "unknown")
+endif()
+string(TIMESTAMP APP_BUILD_TIME "%Y-%m-%dT%H:%M:%SZ" UTC)
+configure_file(main/app_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/app_version.h @ONLY)
 
 # Include directories — add paths to your headers here
 set(APP_INCLUDES
     main
     include
     include/esp_additions/include
+    ${CMAKE_CURRENT_BINARY_DIR}/generated
 )
 
 # Compile app sources as a relocatable object library

@@ -54,52 +54,106 @@ badgelink:
 # Determine badgelink connection argument: --tcp for host:port, --port for serial devices
 BADGELINK_CONN := $(if $(findstring :,$(BADGELINKPORT)),--tcp $(BADGELINKPORT),--port $(BADGELINKPORT))
 
+# Every badgelink call goes through a retry wrapper: a fresh connection
+# intermittently fails with "Invalid sync" when the TCP proxy still holds
+# bytes from a previous session (from tanmatsu-idf6tests).
+BADGELINK := tools/badgelink_retry.sh $(BADGELINK_CONN)
+
+# Needs BadgeLink mode, which mode_badgelink sets up (and which also gets a
+# still-running showreel out of the way first).
 .PHONY: install
-install: build
+install: build mode_badgelink
 	@echo "=== Installing to device ==="
 	@echo "Creating directory $(APP_INSTALL_PATH)..."
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs mkdir $(APP_INSTALL_PATH) || true
-	@echo "Uploading metadata.json..."
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs upload $(APP_INSTALL_PATH)/metadata.json ../../metadata/metadata.json
-	@echo "Uploading icon16.png..."
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs upload $(APP_INSTALL_PATH)/icon16.png ../../metadata/icon16.png
-	@echo "Uploading icon32.png..."
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs upload $(APP_INSTALL_PATH)/icon32.png ../../metadata/icon32.png
-	@echo "Uploading icon64.png..."
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs upload $(APP_INSTALL_PATH)/icon64.png ../../metadata/icon64.png
+	$(BADGELINK) fs mkdir $(APP_INSTALL_PATH) || true
+	@echo "Uploading metadata.json and icons..."
+	$(BADGELINK) fs upload $(APP_INSTALL_PATH)/metadata.json metadata/metadata.json
+	$(BADGELINK) fs upload $(APP_INSTALL_PATH)/icon16.png metadata/icon16.png
+	$(BADGELINK) fs upload $(APP_INSTALL_PATH)/icon32.png metadata/icon32.png
+	$(BADGELINK) fs upload $(APP_INSTALL_PATH)/icon64.png metadata/icon64.png
 	@echo "Uploading app.so..."
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs upload $(APP_INSTALL_PATH)/app.so ../../$(BUILD)/app.so
+	$(BADGELINK) fs upload $(APP_INSTALL_PATH)/app.so $(BUILD)/app.so
 	for t in $(TEXTURES); do \
 	  echo "Uploading $$t..."; \
-	  (cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) fs upload $(APP_INSTALL_PATH)/$$t ../../textures/$$t) || exit 1; \
+	  $(BADGELINK) fs upload $(APP_INSTALL_PATH)/$$t textures/$$t || exit 1; \
 	done
 	@echo "=== Installation complete ==="
 
 GRACELOADER_SLUG ?= at.cavac.graceloader
 
 .PHONY: run
-run:
-	cd badgelink/tools; ./badgelink.sh $(BADGELINK_CONN) start $(GRACELOADER_SLUG) $(APP_INSTALL_PATH)/app.so
+run: mode_badgelink
+	$(BADGELINK) start $(GRACELOADER_SLUG) $(APP_INSTALL_PATH)/app.so
 
 # USB mode switching
 #
 # The device's USB peripheral is in one of two modes: BadgeLink (USB_DEVICE),
-# which is what install / run need, or flash-and-monitor (USB_DEBUG). An
-# `install` that fails to reach the device usually means the launcher left it
-# in debug mode -- `make mode_badgelink` puts it back.
+# which is what install / run need, or flash-and-monitor (USB_DEBUG). After an
+# app hands the badge back, the launcher is in debug mode.
 #
-# Ask the firmware (in USB_DEBUG mode) to switch its USB into BadgeLink mode
-# by sending the token "BADGELINK\n" on the USB-serial/JTAG peripheral. The
-# launcher listens for it (see ../tanmatsu-launcher/main/usb_device.c), so
-# this only works against firmware that implements the listener.
+# mode_badgelink asks for BadgeLink mode by sending "BADGELINK\n" on the debug
+# console, then waits until BadgeLink actually answers. The launcher listens
+# for it (../tanmatsu-launcher/main/usb_device.c); so does the showreel's own
+# debug console (main/debugcon.h), which takes it as "exit to the launcher" --
+# so the next attempt reaches the launcher. The request sometimes gets lost
+# silently, so it is repeated. Does nothing if BadgeLink already answers, so
+# other targets can depend on it. (After tanmatsu-idf6tests.)
 #
 # PORT accepts either a local device path (e.g. /dev/ttyACM0) or an rfc2217://
 # URL pointing at ../tanmatsu-badgefs/rfc2217proxy when the device is
 # forwarded over the network.
+BADGELINK_SWITCH_TRIES ?= 6
+BADGELINK_WAIT_TRIES ?= 5
+
 .PHONY: mode_badgelink
 mode_badgelink:
+	if badgelink/tools/badgelink.sh $(BADGELINK_CONN) fs list /sd >/dev/null 2>&1; then \
+		echo "Badge is already in BadgeLink mode"; exit 0; \
+	fi; \
+	source "$(IDF_SOURCE)" >/dev/null; \
+	for s in $$(seq 1 $(BADGELINK_SWITCH_TRIES)); do \
+		echo "Requesting BadgeLink mode on $(PORT) (attempt $$s)..."; \
+		python3 -c "import serial, sys; s=serial.serial_for_url('$(PORT)', timeout=1); s.write(b'BADGELINK\n'); s.flush(); sys.stdout.write(s.read(128).decode(errors='replace')); s.close()" || true; \
+		echo; \
+		for i in $$(seq 1 $(BADGELINK_WAIT_TRIES)); do \
+			sleep 1; \
+			if badgelink/tools/badgelink.sh $(BADGELINK_CONN) fs list /sd >/dev/null 2>&1; then \
+				echo "Badge is in BadgeLink mode"; exit 0; \
+			fi; \
+		done; \
+	done; \
+	echo "Timed out waiting for BadgeLink mode (a hung app? try 'make recover')" >&2; \
+	exit 1
+
+# Test automation (main/devtest.h, tools/testrun.py)
+#
+#   make testrun TEST="perf scene=turntable secs=20"      the app must be running
+#   make cycle   TEST="shots scene=turntable ms=0,2500"   build, install, run, test
+#   make testrefs    TEST="shots ..."                     cycle, then store the shot hashes as references
+#   make testcompare TEST="shots ..."                     cycle, then compare the hashes against the references
+#   make recover                                          after a crash or hang
+#
+# The app runs the test and returns to the launcher by itself; shot images
+# stay on the SD card; TESTFLAGS=--fetch downloads them (slow).
+TEST ?= perf scene=turntable secs=20
+TESTFLAGS ?=
+
+.PHONY: testrun cycle testrefs testcompare recover
+testrun:
 	source "$(IDF_SOURCE)" >/dev/null && \
-	python3 -c "import serial, sys; s=serial.serial_for_url('$(PORT)', timeout=1); s.write(b'BADGELINK\n'); s.flush(); sys.stdout.write(s.read(128).decode(errors='replace')); s.close()"
+	python3 -u tools/testrun.py --port "$(PORT)" --badgelink-conn "$(BADGELINK_CONN)" $(TESTFLAGS) -- $(TEST)
+
+cycle: build install run
+	$(MAKE) testrun
+
+testrefs:
+	$(MAKE) cycle TESTFLAGS="--capture-refs"
+
+testcompare:
+	$(MAKE) cycle TESTFLAGS="--compare"
+
+recover:
+	source "$(IDF_SOURCE)" >/dev/null && python3 tools/recover.py --port "$(PORT)"
 
 # The other direction: ask the firmware (in BadgeLink mode) to switch its USB
 # back to flash/monitor mode, through BadgeLink's own `mode` command. Uses the
@@ -187,6 +241,18 @@ fullclean: clean
 .PHONY: textures
 textures:
 	python3 tools/make_textures.py
+
+# Host-side check of the math and every mesh generator (tools/meshcheck.c):
+# closed, consistently wound, outward-facing parts; no badge needed. Asset
+# generators that build meshes add their pure *_mesh.c file here.
+HOSTCC ?= cc
+MESHCHECK_SRCS := tools/meshcheck.c main/mesh.c main/xform.c
+
+.PHONY: meshcheck
+meshcheck:
+	mkdir -p $(BUILD)/host
+	$(HOSTCC) -O1 -Wall -Wextra -DMESH_HOST -Imain -Itools $(MESHCHECK_SRCS) -lm -o $(BUILD)/host/meshcheck
+	$(BUILD)/host/meshcheck
 
 .PHONY: format
 format:

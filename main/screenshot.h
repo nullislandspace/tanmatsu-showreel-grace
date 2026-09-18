@@ -33,3 +33,7 @@
 // build's libc exports neither remove() nor unlink() -- so the error
 // names the file and says to delete it.
 bool screenshot_capture(pax_buf_t* fb);
+
+// Capture `fb` to exactly `path` (overwriting it). The directory must
+// exist. Same failure behaviour as screenshot_capture().
+bool screenshot_capture_to(pax_buf_t* fb, char const* path);

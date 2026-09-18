@@ -203,6 +203,20 @@ A quick check with the PSRAM default (no A/B code; 60 periods, not
 aligned to launch): 29.97 fps, `rast` mean 11.70 ms, least vsync slack
 13.26 ms.
 
+## 2026-09-18: after the scene/reel refactor (automated baseline)
+
+`make testrun TEST="perf scene=turntable secs=30"` (tools/testrun.py; 28
+one-second periods): 29.6-30.2 fps, `rast` mean 11.44 ms (4.82-16.32),
+least vsync slack 13.69 ms, submit 0.97 ms, SRAM 152 KiB free / 62 KiB
+largest. Same as before the refactor (`rast` 11.43 ms), so the scene system,
+show clock and debug console cost nothing measurable. (SRAM 163 -> 152 KiB:
+~4 KiB from the larger graceloader export table, the rest the debug console's
+task and driver buffers.)
+
+Reference shots for the engine regression check: `turntable` at 0 / 2.5 /
+5.0 s, stored as framebuffer hashes in `tests/refs/manifest.json`
+(deterministic across app restarts).
+
 ### Reproducing
 
 ```sh
