@@ -1,24 +1,22 @@
 // =====================================================================
-//  Showreel asset  --  laser bolts (see laser.h)
+//  Showreel asset  --  lasers (see laser.h)
 // =====================================================================
 
 #include "assets/laser.h"
 #include "synthengine3d.h"
 
 laser_style_t const LASER_STYLE_MARAUDER = {
-    .speed    = 60.0f,
-    .length   = 2.0f,
-    .lifetime = 1.2f,
+    .duration = 0.12f,
+    .range    = 80.0f,
     .argb     = LASER_RED,
 };
 
-void laser_submit_bolt(vec3_t muzzle, vec3_t dir, float age, laser_style_t const* style) {
-    if (age < 0.0f || age > style->lifetime) return;
-    // The streak's tail leaves the muzzle first: while it is still
-    // growing out of the barrel it is shorter than its full length.
-    float const  head = style->speed * age;
-    float const  tail = head > style->length ? head - style->length : 0.0f;
-    vec3_t const a    = v3_add(muzzle, v3_scale(dir, tail));
-    vec3_t const b    = v3_add(muzzle, v3_scale(dir, head));
-    scene_line(a.x, a.y, a.z, b.x, b.y, b.z, style->argb);
+void laser_submit_beam(vec3_t muzzle, vec3_t target, float t, float t_fire, laser_style_t const* style) {
+    if (!laser_lit(t, t_fire, style)) return;
+    vec3_t      d   = v3_sub(target, muzzle);
+    float const len = v3_len(d);
+    if (len < 1e-4f) return;
+    if (len > style->range) d = v3_scale(d, style->range / len);
+    vec3_t const end = v3_add(muzzle, d);
+    scene_line(muzzle.x, muzzle.y, muzzle.z, end.x, end.y, end.z, style->argb);
 }

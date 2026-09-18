@@ -14,6 +14,7 @@ static char const TAG[] = "reel";
 
 // Every scene there is (initialised at startup, selectable by name).
 static scene_def_t const* const ALL_SCENES[] = {
+    &SCENE_MARAUDER_PURSUIT,
     &SCENE_SPACESTATION_FLYBY,
     &SCENE_TURNTABLE,
     &SCENE_ASSET_VIEWER,
@@ -22,6 +23,7 @@ static scene_def_t const* const ALL_SCENES[] = {
 
 // What plays, in order, looping.
 static scene_def_t const* const PLAYLIST[] = {
+    &SCENE_MARAUDER_PURSUIT,
     &SCENE_SPACESTATION_FLYBY,
 };
 #define PLAY_N (sizeof(PLAYLIST) / sizeof(PLAYLIST[0]))

@@ -81,7 +81,6 @@ static path_t const YELLOW_PATH = {YELLOW_PTS, PATH_N, 0.0f, PATH_DT};
 // --- Lasers -------------------------------------------------------------
 #define FIRE_START    12.0f  // first shot
 #define FIRE_INTERVAL 0.35f  // per marauder, guns alternating
-#define FIRE_LEAD     0.25f  // aim where the player will be this much later
 #define FIRE_MISS     1.6f   // miss distance, world units
 
 // --- Shots --------------------------------------------------------------
@@ -198,21 +197,19 @@ static void set_camera(shot_t shot, float t) {
 
 // --- Lasers -----------------------------------------------------------------
 
-// Every bolt in flight at t, for the marauder on `path`: shots every
-// FIRE_INTERVAL from FIRE_START, guns alternating, each aimed at where the
-// player will be FIRE_LEAD later, offset by a pseudo-random miss.
-static void submit_bolts(path_t const* path, float t, unsigned seed) {
-    float const life = LASER_STYLE_MARAUDER.lifetime;
-    int const   k0   = (int)ceilf((t - life - FIRE_START) / FIRE_INTERVAL);
-    int const   k1   = (int)floorf((t - FIRE_START) / FIRE_INTERVAL);
-    for (int k = k0 < 0 ? 0 : k0; k <= k1; k++) {
-        float const   tf   = FIRE_START + (float)k * FIRE_INTERVAL;
-        xform_t const pose = ship_pose(path, tf, MARAUDER_SPAN, 0.0f);
-        vec3_t const  gun  = marauder_gun(&pose, k & 1);
-        vec3_t const  miss = v3((hash01(k, seed) - 0.5f) * 2.0f, (hash01(k, seed + 1u) - 0.5f) * 2.0f, 0.0f);
-        vec3_t const  aim  = v3_add(path_pos(&PLAYER_PATH, tf + FIRE_LEAD), v3_scale(v3_norm(miss), FIRE_MISS));
-        laser_submit_bolt(gun, v3_norm(v3_sub(aim, gun)), t - tf, &LASER_STYLE_MARAUDER);
-    }
+// The shot lit at t, if any, from the marauder on `path`: a shot every
+// FIRE_INTERVAL from FIRE_START, guns alternating, each a beam from the
+// gun's current position at the player, offset by a pseudo-random miss.
+static void submit_lasers(path_t const* path, float t, unsigned seed) {
+    if (t < FIRE_START) return;
+    int const   k  = (int)floorf((t - FIRE_START) / FIRE_INTERVAL);
+    float const tf = FIRE_START + (float)k * FIRE_INTERVAL;
+    if (!laser_lit(t, tf, &LASER_STYLE_MARAUDER)) return;
+    xform_t const pose   = ship_pose(path, t, MARAUDER_SPAN, 0.0f);
+    vec3_t const  gun    = marauder_gun(&pose, k & 1);
+    vec3_t const  miss   = v3((hash01(k, seed) - 0.5f) * 2.0f, (hash01(k, seed + 1u) - 0.5f) * 2.0f, 0.0f);
+    vec3_t const  target = v3_add(path_pos(&PLAYER_PATH, t), v3_scale(v3_norm(miss), FIRE_MISS));
+    laser_submit_beam(gun, target, t, tf, &LASER_STYLE_MARAUDER);
 }
 
 // --- Scene ------------------------------------------------------------------
@@ -253,8 +250,8 @@ static void flyby_submit(double td) {
     marauder_submit(&green, MARAUDER_GREEN, 1.0f, td, 1u);
     marauder_submit(&yellow, MARAUDER_YELLOW, 1.0f, td, 2u);
 
-    submit_bolts(&GREEN_PATH, t, 101u);
-    submit_bolts(&YELLOW_PATH, t, 202u);
+    submit_lasers(&GREEN_PATH, t, 101u);
+    submit_lasers(&YELLOW_PATH, t, 202u);
 }
 
 static char const* flyby_shot(double t) {

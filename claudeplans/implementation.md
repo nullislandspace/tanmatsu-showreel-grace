@@ -362,6 +362,8 @@ The spokes reuse `plate_gunmetal.png`.
 - **D-21** 2026-09-18, user: no routine image downloads (BadgeLink needs well over a minute per 1.1 MB PNG). Shot tests compare framebuffer hashes reported over the console. Images only with `--fetch`, or by hand: `badgelink/tools/badgelink.sh --tcp $BADGELINKPORT fs download /sd/showreel/test/<scene>_<ms>.png out.png`.
 - **D-22** 2026-09-18, user: test scripts are time-boxed; move on to the app. Tight timeouts: connect ≤ 12 s, stall 10 s.
 - **D-23** 2026-09-18, user: flyby v1 accepted ("looks quite OK"). Next: a separate opening scene. The camera is close behind the marauders and right of the right marauder's centreline; they fly in formation with slight wing wiggles, firing at the player (out of frame). It establishes that the marauders won't give up.
+- **D-24** 2026-09-18, user: lasers are beams, not bolts. A shot lights up from the gun's current position to its target for a fraction of a second (0.12 s); nothing travels. This replaced the bolt model, whose streaks started behind fast ships.
+- **D-25** 2026-09-18, user: new opening scene `marauder_pursuit` (6 s, before the flyby): the marauders fill much of the screen from close behind and right of the right ship; the beams run off the screen edge (camera ~50° off the flight line, beyond half the 42° FOV).
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:

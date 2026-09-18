@@ -1,29 +1,37 @@
 #pragma once
 // =====================================================================
-//  Showreel asset  --  laser bolts
+//  Showreel asset  --  lasers
 // ---------------------------------------------------------------------
-//  A bolt is a short red streak (scene_line, so unlit and never hidden
-//  by its own glow) travelling in a straight line. It is a pure function
-//  of time: where it is follows from where and when it was fired, so a
-//  scene only needs a fire schedule, no bolt state.
+//  A laser shot is a beam, not a projectile: for a fraction of a second
+//  a red line lights up from the gun to where it is aimed (scene_line,
+//  so it is unlit and nothing shades it). It is drawn from the gun's
+//  position at the current instant, so it always starts at the turret
+//  however the ship moves. A pure function of time, like everything
+//  else: a scene keeps a fire schedule and asks, per shot, whether that
+//  shot is still lit.
 // =====================================================================
 
+#include <stdbool.h>
 #include <stdint.h>
 #include "xform.h"
 
 #define LASER_RED 0xFFFF3020u
 
 typedef struct {
-    float    speed;     // world units per second
-    float    length;    // streak length, world units
-    float    lifetime;  // seconds until it fades out of existence
+    float    duration;  // seconds a shot stays lit
+    float    range;     // longest beam, world units (it stops at the target if nearer)
     uint32_t argb;
 } laser_style_t;
 
-// The marauders' bolts.
+// The marauders' guns.
 extern laser_style_t const LASER_STYLE_MARAUDER;
 
-// Draw a bolt fired from `muzzle` along the unit vector `dir`, `age`
-// seconds ago. Nothing is drawn before it is fired (age < 0) or once
-// its lifetime is over.
-void laser_submit_bolt(vec3_t muzzle, vec3_t dir, float age, laser_style_t const* style);
+// True while the shot fired at `t_fire` is lit at time `t`.
+static inline bool laser_lit(float t, float t_fire, laser_style_t const* style) {
+    return t >= t_fire && t < t_fire + style->duration;
+}
+
+// Draw the beam of the shot fired at `t_fire`, if it is lit at `t`: from
+// `muzzle` (the gun's position NOW) towards `target`, at most
+// style->range long.
+void laser_submit_beam(vec3_t muzzle, vec3_t target, float t, float t_fire, laser_style_t const* style);

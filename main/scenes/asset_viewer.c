@@ -85,10 +85,11 @@ static void viewer_submit(double t) {
             starfield_submit();
             marauder_livery_t const l = shot == SHOT_MARAUDER_GREEN ? MARAUDER_GREEN : MARAUDER_YELLOW;
             marauder_submit(&x, l, 1.0f, t, (unsigned)l + 1u);
-            // A burst from both guns every second.
-            float const since = (float)fmod(lt, 1.0);
+            // A shot from each gun every second, alternating.
             for (int side = 0; side < 2; side++) {
-                laser_submit_bolt(marauder_gun(&x, side), v3(0.0f, 0.0f, 1.0f), since, &LASER_STYLE_MARAUDER);
+                float const  tf  = floorf((float)lt) + 0.5f * (float)side;
+                vec3_t const gun = marauder_gun(&x, side);
+                laser_submit_beam(gun, v3_add(gun, v3(0.0f, 0.0f, 20.0f)), (float)lt, tf, &LASER_STYLE_MARAUDER);
             }
             break;
         }

@@ -13,6 +13,10 @@
 // kept for reuse, not in the playlist once real scenes exist.
 extern scene_def_t const SCENE_TURNTABLE;
 
+// Opening: the two marauders in formation, from close behind, firing
+// at the (unseen) player.
+extern scene_def_t const SCENE_MARAUDER_PURSUIT;
+
 // The player's ship threads a turning wheel station, chased by two
 // marauders.
 extern scene_def_t const SCENE_SPACESTATION_FLYBY;
