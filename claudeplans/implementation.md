@@ -235,9 +235,9 @@ Durations are first estimates, to be tuned per scene; total ≈ 1:50.
 
 | # | Scene (file / `name`) | Status | Content | ~s |
 |---|---|---|---|---|
-| 1 | `title` | new | 3D title "Borderworlds:" / "Superior", drifting in, canted into the screen | 7 |
-| 2 | `planet_landing` | new | The hero ship lands on a planet; industrial buildings behind it, flare stacks burning | 12 |
-| 3 | `marauder_approach` | new | Medium close-up: the marauders fly towards that planet | 6 |
+| 1 | `title` | done | 3D title "Borderworlds:" / "Superior", drifting in, canted into the screen, on sky blue | 12.5 |
+| 2 | `planet_landing` | done | The hero ship lands on a planet; industrial buildings behind it, flare stacks burning | 12 |
+| 3 | `marauder_approach` | done | Medium close-up: the marauders fly towards that planet | 6 |
 | 4 | `pad_strafe` | new | Medium close-up: the marauders fire on the landed hero ship | 7 |
 | 5 | `emergency_takeoff` | new | The hero ship takes off in a hurry and climbs between the incoming marauders, firing blue lasers | 8 |
 | 6 | `marauder_pursuit` | exists | The marauders close up, firing red lasers (Part C2) | 6 |
@@ -419,9 +419,9 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 | 9.8 | `space_dust` | done | 160 motes wrapped in a 24-unit box round the camera; dots or streaks (towards the point the camera heads for). Dust shot 30 fps |
 | 9.9 | Asset viewer: shots for the new assets; perf per asset (as F-19) | done | 12 shots × 8 s (title, both planets, asteroids, warp, explosion, dust, base); per-shot backdrop (`scene_def_t.backdrop_at`). Perf and frames: F-26. Also: host builds now fail on implicit declarations (one had made "Superior" 6 px wide on the host) |
 | **10** | **Full reel: new scenes** (each: host replica/scenecheck clean → device shots → review → user's look) | | |
-| 10.1 | Scene 1 `title`: layout solved on the host (left end ~5%, right end ~70%), drift-in, hold | todo | |
-| 10.2 | Scene 2 `planet_landing` | todo | |
-| 10.3 | Scene 3 `marauder_approach` | todo | |
+| 10.1 | Scene 1 `title`: layout solved on the host (left end ~5%, right end ~70%), drift-in, hold | done | `scenes/title.c`, first in the playlist. Cant 28°; the depth of the left end is solved so the ends land at 5% and 70% (scenecheck: both lines x 18..565 px). Line 1 drifts down from 0.3 s, line 2 up from 0.8 s, each over 4.5 s, then a 7.2 s hold: 12.5 s. Sky-blue PPA backdrop, no stars (D-34). Badge: 30 fps, rast 13 ms (max 19.6), ~364 textured tris; frames at 3 s and 9 s checked |
+| 10.2 | Scene 2 `planet_landing` | done | 12 s, 2 shots: establish (wide, from the south-west, 0–6 s) and touchdown (low beside the pad, looking up at the ship). Approach on a Catmull-Rom path nose first along +z, braking to a hover at 5.5 over the pad (7 s), sinking onto it (7.4–10.4 s), engines off by 11.2 s; pitch follows the descent and the braking. The ship is span 2 here: at span 1 scenecheck measured it at 37 px on touchdown. Badge: establish 24 fps, touchdown 20 fps after reframing (12.5 fps looking down at the pad: F-26); belly exactly on the pad (scenecheck contact 0.000). Also fixed: the scene was only in the playlist, not in ALL_SCENES (clang-format had reflowed that list), so it would have played uninitialised; both lists are now one scene per line and `reel_init` logs a playlist scene missing from ALL_SCENES |
+| 10.3 | Scene 3 `marauder_approach` | done | 6 s: the formation (shared `formation.c`, a looser pair: side by side, yellow a length back) flies along −z towards the terran planet (radius 520 at ~1500 units, lit from the right). Camera in the formation's frame behind-left of the pair, looking ahead past them; ships 116 and 155 px wide, planet ~400 px. Badge: 24 fps, rast 37 ms: the planet's textured disc (~120k px) is the cost (F-26). The 128×64 map shows big texels at this size; a finer map or the PPA-layer planet (9.4) are options for 11.2 |
 | 10.4 | Scene 4 `pad_strafe` | todo | |
 | 10.5 | Scene 5 `emergency_takeoff` | todo | |
 | 10.6 | Scene 8 `warp_out` | todo | |
@@ -580,6 +580,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 - **D-31** 2026-09-18, Claude: scenes set their camera in a separate `camera(t)` callback, called before the backdrop is queued. The sky/ground backdrop needs the horizon, and so the camera, before the PPA starts. Keeping the fill ahead of `submit()` keeps it overlapped with the geometry work (Stunt Racer sets its camera in `on_update` for the same reason). Since scenes are pure functions of t, the split costs nothing.
 - **D-32** 2026-09-18, user: ignore last-bit discrepancies like F-25 ("We are making a game engine here, not a scientific paper"). When a deliberate refactor changes a reference hash only through rounding, re-capture the reference with a reason; no bit-exactness gymnastics.
 - **D-33** 2026-09-18, user: keep the planet base's apron as it is (56×56 units, textured) for now; the fill-rate question (F-26) is decided later, with the planet scenes' real framing (step 11.2).
+- **D-34** 2026-09-18, user: the title is on a sky-blue background; the lines drift in more slowly and hold 4 s longer before the next scene (drift 3 → 4.5 s, hold 3.2 → 7.2 s; the scene 7 → 12.5 s).
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:

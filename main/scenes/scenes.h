@@ -13,6 +13,15 @@
 // kept for reuse, not in the playlist once real scenes exist.
 extern scene_def_t const SCENE_TURNTABLE;
 
+// Scene 1: the 3D title "Borderworlds:" / "Superior", drifting in.
+extern scene_def_t const SCENE_TITLE;
+
+// Scene 2: the hero ship lands at the planet base.
+extern scene_def_t const SCENE_PLANET_LANDING;
+
+// Scene 3: the marauders fly towards the planet (medium close-up).
+extern scene_def_t const SCENE_MARAUDER_APPROACH;
+
 // Opening: the two marauders in formation, from close behind, firing
 // at the (unseen) player.
 extern scene_def_t const SCENE_MARAUDER_PURSUIT;

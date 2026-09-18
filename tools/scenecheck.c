@@ -67,6 +67,10 @@ typedef struct {
 } check_t;
 
 static check_t const CHECKS[] = {
+    {&SCENE_TITLE, 0.0f, NULL, NULL, NULL},
+    {&SCENE_MARAUDER_APPROACH, 0.0f, NULL, NULL, NULL},
+    {&SCENE_PLANET_LANDING, 0.0f, NULL, "apron*-base*,player_ship*-base*",
+     "the base stands on the apron; the ship lands on the pad (part of the base)"},
     {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL},
     {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, NULL, NULL},
     {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},
@@ -106,6 +110,7 @@ typedef struct {
     int   frames;
     int   tri, ttri, line, point;                // peaks
     float max_w[MAX_LABELS], max_h[MAX_LABELS];  // largest on-screen extent per label
+    float x0[MAX_LABELS], x1[MAX_LABELS];        // leftmost / rightmost screen x reached
 } shot_stat_t;
 
 typedef struct {
@@ -455,8 +460,14 @@ static void frame_end(int frame, float t, char const* shot) {
         l->frames++;
         if (o->drawn) {
             float const w = o->sx1 - o->sx0, h = o->sy1 - o->sy0;
+            if (s->max_w[o->label] == 0.0f && s->max_h[o->label] == 0.0f) {
+                s->x0[o->label] = o->sx0;
+                s->x1[o->label] = o->sx1;
+            }
             if (w > s->max_w[o->label]) s->max_w[o->label] = w;
             if (h > s->max_h[o->label]) s->max_h[o->label] = h;
+            if (o->sx0 < s->x0[o->label]) s->x0[o->label] = o->sx0;
+            if (o->sx1 > s->x1[o->label]) s->x1[o->label] = o->sx1;
         }
         if (o->min_z == FLT_MAX) continue;  // not in view
         if (o->min_z < l->min_z) {
@@ -597,13 +608,14 @@ static int check_scene(check_t const* c) {
     }
 
     if (c->contact_ok) fprintf(s_out, "    allowed to touch: %s -- %s\n", c->contact_ok, c->why ? c->why : "");
-    fprintf(s_out, "  framing (largest on-screen extent per shot, px, w x h)\n");
+    fprintf(s_out, "  framing (largest on-screen extent per shot, px, w x h; screen x reached)\n");
     for (int i = 0; i < s_shot_n; i++) {
         shot_stat_t const* s = &s_shots[i];
         fprintf(s_out, "    %-12s", s->name);
         for (int k = 0; k < s_label_n; k++) {
             if (s->max_w[k] > 0.0f)
-                fprintf(s_out, "  %s %.0fx%.0f", s_labels[k].label, (double)s->max_w[k], (double)s->max_h[k]);
+                fprintf(s_out, "  %s %.0fx%.0f [x %.0f..%.0f]", s_labels[k].label, (double)s->max_w[k],
+                        (double)s->max_h[k], (double)s->x0[k], (double)s->x1[k]);
         }
         fprintf(s_out, "\n");
     }

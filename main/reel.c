@@ -13,16 +13,29 @@
 static char const TAG[] = "reel";
 
 // Every scene there is (initialised at startup, selectable by name).
+// One per line, in both lists, so adding a scene is a one-line diff.
+// clang-format off
 static scene_def_t const* const ALL_SCENES[] = {
-    &SCENE_MARAUDER_PURSUIT, &SCENE_SPACESTATION_FLYBY, &SCENE_TURNTABLE, &SCENE_ASSET_VIEWER, &SCENE_HORIZON_TEST,
+    &SCENE_TITLE,
+    &SCENE_PLANET_LANDING,
+    &SCENE_MARAUDER_APPROACH,
+    &SCENE_MARAUDER_PURSUIT,
+    &SCENE_SPACESTATION_FLYBY,
+    &SCENE_TURNTABLE,
+    &SCENE_ASSET_VIEWER,
+    &SCENE_HORIZON_TEST,
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
 // What plays, in order, looping.
 static scene_def_t const* const PLAYLIST[] = {
+    &SCENE_TITLE,
+    &SCENE_PLANET_LANDING,
+    &SCENE_MARAUDER_APPROACH,
     &SCENE_MARAUDER_PURSUIT,
     &SCENE_SPACESTATION_FLYBY,
 };
+// clang-format on
 #define PLAY_N (sizeof(PLAYLIST) / sizeof(PLAYLIST[0]))
 
 static scene_def_t const* s_cur;
@@ -40,6 +53,12 @@ static void enter(scene_def_t const* sc) {
 
 void reel_init(char const* asset_dir) {
     texcache_init(asset_dir);
+    // A playlist scene missing from ALL_SCENES would play uninitialised.
+    for (size_t p = 0; p < PLAY_N; p++) {
+        bool known = false;
+        for (size_t i = 0; i < ALL_N; i++) known |= ALL_SCENES[i] == PLAYLIST[p];
+        if (!known) ESP_LOGE(TAG, "playlist scene %s is not in ALL_SCENES: not initialised", PLAYLIST[p]->name);
+    }
     for (size_t i = 0; i < ALL_N; i++) {
         if (ALL_SCENES[i]->init) ALL_SCENES[i]->init(asset_dir);
     }
