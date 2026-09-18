@@ -11,6 +11,7 @@ project(app C)
 set(APP_SOURCES
     main/main.c
     main/ship.c
+    main/profile.c
     main/crt0.c
 )
 

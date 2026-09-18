@@ -1,0 +1,105 @@
+# Performance baseline
+
+> Reference numbers for the showreel, to compare later changes against.
+> Measured on the device, not estimated.
+
+## Baseline: 2026-09-18, ship turntable
+
+**Result: a steady 30 FPS (33.4 ms/frame). The display's vsync sets that rate,
+not the renderer.** At the heaviest pose the app uses about 21.8 ms of its
+33.3 ms frame, leaving roughly 11.6 ms of headroom.
+
+### What was running
+
+| | |
+|---|---|
+| Scene | Race the Synth ship on a turntable, black backdrop (`main/ship.c`) |
+| Mesh | 169 verts / 306 tris / 84 outline edges; **115–152 tris visible** after the app's back-face cull |
+| Screen coverage | up to ~719 px wide (broadside) on 800×480 |
+| Renderer | `SE_RENDER_ZBUFFER`, `frustum_cull` on, `depth_order` off |
+| Lighting | engine `se_light`, one positional light, 75% brightness, `two_sided` |
+| Backdrop | full-screen PPA FILL, overlapped with submit + prepare |
+| Framebuffers | 2× 800×480 RGB565 in PSRAM |
+| Code | showreel: the commit that adds this file; engine V1.5 `d9f8e5a` |
+
+### Per-phase time, ms per frame
+
+Each row is one 1-second window from the `ms/frame:` log line. There are eight
+consecutive windows, covering a bit less than one turntable revolution.
+
+| frame | fps | fill | submit | prep | wait | rast | blit | vsync | rest |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 33.38 | 30.0 | 0.06 | 0.57 | 0.04 | 1.77 | 15.93 | 0.47 | 14.46 | 0.09 |
+| 33.51 | 29.8 | 0.06 | 0.55 | 0.04 | 1.80 | 16.69 | 0.51 | 13.78 | 0.09 |
+| 33.05 | 30.3 | 0.06 | 0.58 | 0.04 | 1.77 | 12.79 | 0.51 | 17.22 | 0.09 |
+| 33.11 | 30.2 | 0.06 | 0.59 | 0.04 | 1.76 |  7.77 | 0.48 | 22.32 | 0.09 |
+| 33.41 | 29.9 | 0.06 | 0.58 | 0.04 | 1.77 |  7.27 | 0.48 | 23.13 | 0.09 |
+| 33.86 | 29.5 | 0.06 | 0.58 | 0.04 | 1.77 | 11.74 | 0.45 | 19.14 | 0.09 |
+| 33.49 | 29.9 | 0.06 | 0.57 | 0.04 | 1.78 | 17.44 | 0.43 | 13.10 | 0.09 |
+| 33.22 | 30.1 | 0.06 | 0.57 | 0.04 | 1.78 | 18.91 | 0.40 | 11.37 | 0.09 |
+
+Summary:
+
+| phase | min | max | mean | what it is |
+|---|---:|---:|---:|---|
+| fill   |  0.06 |  0.06 |  0.06 | queuing the PPA FILL (the fill itself runs on hardware) |
+| submit |  0.55 |  0.59 |  0.57 | model transform, back-face cull, `scene_tri` including engine lighting |
+| prep   |  0.04 |  0.04 |  0.04 | `scene_prepare`: engine cull + order |
+| wait   |  1.76 |  1.80 |  1.77 | waiting for the PPA FILL to finish |
+| rast   |  7.27 | 18.91 | 13.57 | `scene_rasterize`, depends on pose |
+| blit   |  0.40 |  0.51 |  0.47 | `bsp_display_blit` |
+| vsync  | 11.37 | 23.13 | 16.82 | idle, waiting for the tearing-effect signal |
+| rest   |  0.09 |  0.09 |  0.09 | input pump, `on_update`, loop overhead |
+| **app work** (fill → rast) | **9.72** | **21.36** | 16.02 | |
+
+Rasterize split for the last frame of each window (`scene_raster_stats`):
+triangles took **5.3–15.2 ms** and edges **1.2–4.9 ms**. Both follow screen
+coverage, not triangle count: 152 triangles at the edge-on pose took less time
+than 115 at the broadside one.
+
+Internal SRAM, taken once per window: **163 KiB free, 62 KiB largest block**.
+The value was the same in every window.
+
+### Reading it
+
+- **Vsync caps the frame rate.** App work plus blit ranges from 10.2 to 21.8 ms,
+  yet every frame is 33.3 ms. The `vsync` wait moves in exact step with `rast`
+  and fills the frame out to 33.3 ms. At the lightest pose the wait is 23 ms,
+  which is more than a whole 60 Hz period. So the tearing-effect signal is
+  arriving at about 30 Hz: frames aren't just missing a 60 Hz window. The cause
+  wasn't investigated, because 30 FPS is the target.
+- **Headroom is about 11.6 ms at the heaviest pose** (33.3 − 21.8). Content can
+  grow by roughly that much before the frame rate drops to the next vsync step.
+- **`rast` is the only phase that varies**, and it depends on pose. It is
+  fill-bound: its cost follows the pixels the ship covers. It peaks broadside,
+  when the near wing is magnified by perspective.
+- **The PPA overlap doesn't fully hide the fill.** The full-screen FILL takes
+  about 2.4 ms. Only about 0.67 ms of CPU work (fill + submit + prep) runs
+  alongside it, so each frame waits about 1.8 ms. That is still far cheaper than
+  a CPU clear. If the CPU fallback ran instead, `fill` would jump from 0.06 to
+  several milliseconds.
+- **The engine's lighting is cheap.** All of `submit`, including one normal,
+  one dot product and one `sqrtf` per face, costs 0.57 ms.
+- **The blit only starts the transfer** (0.4–0.5 ms). It isn't a
+  full-framebuffer copy on the CPU.
+
+### Reproducing
+
+```sh
+make install && make run
+# then read the console (graceloader logs there; no USB mode switch needed).
+# pyserial lives in the ESP-IDF python env, hence the source:
+source "$IDF_SOURCE" >/dev/null && python3 -c "
+import serial, time
+s = serial.serial_for_url('rfc2217://localhost:4001', timeout=1)
+t = time.time() + 12; b = b''
+while time.time() < t: b += s.read(1024)
+print(b.decode(errors='replace'))"
+```
+
+Every second the app logs two lines:
+- the phase split (`main/profile.c`)
+- FPS, renderer, raster split and SRAM (`log_frame_stats()` in `main/main.c`)
+
+`make install` fails with `ConnectionResetError` while the app is still
+running. Exit it first.

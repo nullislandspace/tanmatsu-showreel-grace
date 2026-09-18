@@ -24,7 +24,10 @@
 
 #include <math.h>
 #include <stdbool.h>
+#include "esp_heap_caps.h"
 #include "esp_log.h"
+#include "esp_timer.h"
+#include "profile.h"
 #include "ship.h"
 #include "synthengine3d.h"  // the whole engine public API
 
@@ -75,6 +78,71 @@ static char const TAG[] = "showreel";
 
 static bool s_ppa_up        = false;  // compositor came up in on_init
 static bool s_fill_inflight = false;  // this frame's FILL was accepted
+
+// Once-a-second profiling, two lines, in the same shape as Stunt Racer's:
+//
+//   the phase split  -- per-frame ms for each prof_phase_t, the
+//                       engine's blit and vsync wait among them, plus
+//                       the unclaimed residual (profile.h), and
+//   the summary      -- FPS, the renderer, the last frame's rasterize
+//                       split (post-cull triangle / edge counts and their
+//                       wallclock), and internal SRAM.
+//
+// SRAM is reported as total free AND the largest free block, because the
+// second is the one that actually gates an allocation: total free can
+// look healthy while fragmentation has already made the next
+// contiguous buffer impossible. Both come from MALLOC_CAP_INTERNAL only
+// -- PSRAM is a separate 32 MB pool and would drown the number that
+// matters. Sampled once per period rather than tracked, so a transient
+// dip between two samples will not show; this is a trend, not a
+// low-water mark.
+static void log_frame_stats(void) {
+    static int64_t last_us = 0;
+    static int     frames  = 0;
+
+    int64_t const now = esp_timer_get_time();
+    if (last_us == 0) {
+        // First frame after the splash: start the clock at the END of it
+        // and drop its phase times, so the first period covers exactly
+        // the frames it counts -- not on_init, se_splash() or half a
+        // frame of phases the clock never saw start.
+        last_us = now;
+        prof_reset();
+        return;
+    }
+    frames++;
+    prof_frame();
+
+    // The engine's present runs after on_render returns, so what it
+    // reports now is the present that happened since the previous
+    // on_render -- inside this period, one per frame counted.
+    int64_t blit_us = 0, vsync_us = 0;
+    se_present_stats(&blit_us, &vsync_us);
+    prof_add(PROF_BLIT, blit_us);
+    prof_add(PROF_VSYNC, vsync_us);
+    int64_t const elapsed = now - last_us;
+    if (elapsed < 1000000) return;
+
+    // Last frame's rasterize split. Instantaneous, not averaged over the
+    // period like the phases -- on a scene this steady the two agree.
+    int     tri_n = 0, line_n = 0;
+    int64_t tri_us = 0, line_us = 0;
+    scene_raster_stats(&tri_n, &line_n, &tri_us, &line_us);
+
+    float const frame_ms = (float)elapsed / (1000.0f * (float)frames);
+    char        phases[160];
+    if (prof_flush(phases, sizeof(phases), frame_ms)) {
+        ESP_LOGI(TAG, "  %.2f ms/frame:  %s", (double)frame_ms, phases);
+    }
+
+    ESP_LOGI(TAG, "%.1f fps  %s  tris %d (%lld us)  lines %d (%lld us)  sram free %u KiB largest %u KiB",
+             (double)frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), tri_n, (long long)tri_us,
+             line_n, (long long)line_us, (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+             (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
+
+    frames  = 0;
+    last_us = now;
+}
 
 // Once, after the engine has booted display + audio + scene, before the
 // first frame.
@@ -144,6 +212,7 @@ static void on_update(float dt, void* user) {
 static void on_backdrop(pax_buf_t* fb, void* user) {
     (void)user;
 
+    prof_begin(PROF_FILL);
     s_fill_inflight = false;
     if (s_ppa_up) {
         // Whole screen, in logical rows -- pax_buf_get_height() is
@@ -154,14 +223,22 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
     if (!s_fill_inflight) {
         // Refused (queue full / unsupported orientation) or PPA never
         // came up. Clear on the CPU instead; must NOT wait on a job id
-        // whose submit returned false.
+        // whose submit returned false. Timed as "fill" too, so a PPA
+        // that has silently stopped working shows up as this phase
+        // jumping from ~0 to several milliseconds.
         pax_background(fb, BACKDROP_ARGB);
     }
+    prof_end(PROF_FILL);
 
+    prof_begin(PROF_SUBMIT);
     render_set_camera(CAM_X, CAM_Y);
     scene_begin(fb);
     ship_submit();
+    prof_end(PROF_SUBMIT);
+
+    prof_begin(PROF_PREPARE);
     scene_prepare(RENDER_MODE);
+    prof_end(PROF_PREPARE);
 }
 
 // Rest of frame: paint. The FILL has to be complete first -- the ship
@@ -170,10 +247,18 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
 static void on_render(pax_buf_t* fb, void* user) {
     (void)user;
     (void)fb;
+
+    prof_begin(PROF_WAIT);
     if (s_fill_inflight) {
         se_ppa_wait_job(JOB_CLEAR);
     }
+    prof_end(PROF_WAIT);
+
+    prof_begin(PROF_RASTER);
     scene_rasterize(RENDER_MODE);
+    prof_end(PROF_RASTER);
+
+    log_frame_stats();
 }
 
 // Hand the loop to the engine. Does not return under graceloader: F1
