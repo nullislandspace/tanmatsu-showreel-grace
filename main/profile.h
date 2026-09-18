@@ -32,7 +32,7 @@ typedef enum {
                     // (which includes the engine's per-face lighting)
     PROF_PREPARE,   // scene_prepare: engine cull + order, no pixels
     PROF_WAIT,      // se_ppa_wait_job: fill still running when the CPU was done
-    PROF_RASTER,    // scene_rasterize: triangles, then edges
+    PROF_RASTER,    // scene_rasterize: flat triangles, textured ones, then edges
     PROF_BLIT,      // engine present: frame handed to the LCD (se_present_stats)
     PROF_VSYNC,     // engine present: idle until the tearing-effect signal
     PROF_COUNT,

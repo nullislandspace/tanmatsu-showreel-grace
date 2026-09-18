@@ -10,13 +10,24 @@
 
 #include <stdbool.h>
 
+// Load the hull's plate textures from `asset_dir` (the app's install
+// directory) into internal SRAM, and work out which plate each gold
+// face gets and where on it. Call once from on_init, before the first
+// ship_submit. Returns the number of plates that loaded; any plate that
+// failed leaves its faces in the flat gold, so the ship always draws.
+int ship_init(char const* asset_dir);
+
+// Unload the plate textures. Between frames only (se_texture_unload).
+void ship_shutdown(void);
+
 // Advance the turntable. dt is seconds, as handed to on_update.
 void ship_update(float dt);
 
 // Submit the mesh for this frame: between scene_begin() and
-// scene_render(). Emits filled triangles (back faces culled, flat
-// region colours -- the engine's light shades them) plus the wireframe
-// ridge outline.
+// scene_render(). The gold hull goes in as textured triangles (metal
+// plates), the other regions as flat ones, all with back faces culled
+// and all shaded by the engine's light; then the wireframe ridge
+// outline.
 void ship_submit(void);
 
 // The hull's centre in world space: the point the turntable spins

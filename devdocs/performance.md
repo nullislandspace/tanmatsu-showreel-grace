@@ -83,6 +83,66 @@ The value was the same in every window.
 - **The blit only starts the transfer** (0.4–0.5 ms). It isn't a
   full-framebuffer copy on the CPU.
 
+## 2026-09-18: textured hull
+
+Same scene, but the gold hull is textured with four 64×64 metal plates in
+internal SRAM (`scene_textured_tri`, engine V1.5). Twenty-one consecutive
+1-second windows, covering about two turntable revolutions:
+
+| | baseline (flat gold) | textured | |
+|---|---:|---:|---|
+| **fps** | 29.5–30.3 | **29.1–30.4** | the heaviest window slips below 30 |
+| rast | 7.3–18.9 ms | **8.1–30.9 ms** | |
+| &nbsp;&nbsp;flat tris | 5.3–15.2 ms | 0.9–3.9 ms (81–101 tris) | the lamps, poles and panel |
+| &nbsp;&nbsp;**textured tris** | — | **5.5–23.2 ms** (34–69 tris) | the hull |
+| &nbsp;&nbsp;edges | 1.2–4.9 ms | 3.3–4.2 ms | unchanged |
+| submit | 0.55–0.59 ms | 0.70–0.94 ms | UV setup + per-face shade |
+| vsync (slack) | 11.4–23.1 ms | **0.01–22.0 ms** | |
+| SRAM free / largest | 163 / 62 KiB | 131 / 62 KiB | −32 KiB: the four plates |
+
+**The heaviest pose no longer fits the frame.** App work plus blit peaks at
+about 34.3 ms against the 33.3 ms vsync period, so in that window some frames
+wait for the next vsync (29.1 FPS). Every other window holds 30 FPS. The
+textured pass costs roughly 3–4× what the same pixels cost as a flat fill.
+Each drawn pixel now pays a float divide, a texel fetch and the shade multiply
+on top of the depth test and framebuffer write.
+
+The 32 KiB drop in free SRAM is exactly the four plates, so they did land
+internal. The 68 KB textured-triangle list is larger than the 62 KiB largest
+free block, so it must have gone to PSRAM. That is inferred from the numbers:
+the boot log line saying so wasn't captured.
+
+### Is the perspective divide the cost? (measured: mostly no)
+
+The textured loop divides once per drawn pixel, so the obvious suspect is
+that divide. Each variant below ran for about two turntable revolutions
+(21–22 one-second windows). Each ran after the app was restarted.
+
+| variant | `rast` mean | `rast` max | textured pass, mean |
+|---|---:|---:|---:|
+| **one divide per pixel (kept)** | **20.52** | 30.91 | **15.25** |
+| no divide: reciprocal once per column (wrong image, timing only), 2 runs | 19.02 / 18.85 | 26.31 / 25.99 | 13.73 / 13.31 |
+| span-subdivided, 16 px, first version | 21.76 | 29.73 | 16.40 |
+| span-subdivided, 16 px, one reciprocal + carried 16.16 fixed point | 21.09 | 29.17 | 15.83 |
+
+- **The divide is about 10% of the textured pass**, roughly 1.5 ms. The hull
+  costs about 7 ms more textured than as flat gold, so the other ~5.5 ms is
+  elsewhere: float→int conversions, the texel fetch, and the shade multiply.
+- **Span subdivision loses on this model.** Textured hull columns are short.
+  Over 12 yaw × 3 nod poses the median column is 8 px and the mean 12, and
+  75% of columns fit in one span. Each column pays an exact sample at its
+  start plus one per span, so the average is one divide per 5.1 pixels, not
+  per 16. The per-column and per-span setup costs more than the ~1.2 ms that
+  could save.
+- The divide is also cheaper than its latency suggests. It sits next to a
+  PSRAM depth read, and part of it hides behind that stall.
+- Span subdivision should pay off for large triangles with long columns
+  (floors, walls, anything filling the screen). Revisit it for that kind of
+  content.
+- Noise: the two no-divide runs agree to within 0.17 ms, so the 0.6 ms gap
+  between the per-pixel and span versions is about 3× that. The per-pixel
+  run was measured only once.
+
 ### Reproducing
 
 ```sh

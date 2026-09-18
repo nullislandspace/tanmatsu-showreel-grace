@@ -27,6 +27,7 @@
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "graceloader.h"
 #include "profile.h"
 #include "ship.h"
 #include "synthengine3d.h"  // the whole engine public API
@@ -125,9 +126,10 @@ static void log_frame_stats(void) {
 
     // Last frame's rasterize split. Instantaneous, not averaged over the
     // period like the phases -- on a scene this steady the two agree.
-    int     tri_n = 0, line_n = 0;
-    int64_t tri_us = 0, line_us = 0;
+    int     tri_n = 0, line_n = 0, ttri_n = 0;
+    int64_t tri_us = 0, line_us = 0, ttri_us = 0;
     scene_raster_stats(&tri_n, &line_n, &tri_us, &line_us);
+    scene_textured_stats(&ttri_n, &ttri_us);
 
     float const frame_ms = (float)elapsed / (1000.0f * (float)frames);
     char        phases[160];
@@ -135,10 +137,11 @@ static void log_frame_stats(void) {
         ESP_LOGI(TAG, "  %.2f ms/frame:  %s", (double)frame_ms, phases);
     }
 
-    ESP_LOGI(TAG, "%.1f fps  %s  tris %d (%lld us)  lines %d (%lld us)  sram free %u KiB largest %u KiB",
-             (double)frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), tri_n, (long long)tri_us,
-             line_n, (long long)line_us, (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
-             (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
+    ESP_LOGI(
+        TAG, "%.1f fps  %s  tris %d (%lld us)  ttris %d (%lld us)  lines %d (%lld us)  sram free %u KiB largest %u KiB",
+        (double)frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), tri_n, (long long)tri_us, ttri_n,
+        (long long)ttri_us, line_n, (long long)line_us, (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+        (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
 
     frames  = 0;
     last_us = now;
@@ -164,6 +167,12 @@ static void on_init(void* user) {
     if (!s_ppa_up) {
         ESP_LOGW(TAG, "PPA unavailable -- falling back to CPU backdrop clear");
     }
+
+    // Hull plate textures, from wherever graceloader started us (the SD
+    // card install, /sd/apps/at.cavac.showreel). After se_splash() so
+    // the splash's frames are not delayed by the file reads.
+    int const plates = ship_init(graceloader_get_install_basepath());
+    ESP_LOGI(TAG, "hull plates loaded: %d of 4", plates);
 
     // Aim the scene light. After se_splash() so the splash keeps its own
     // flat colours, and once here rather than per frame -- neither the
@@ -261,6 +270,14 @@ static void on_render(pax_buf_t* fb, void* user) {
     log_frame_stats();
 }
 
+// Only if the loop is ever asked to stop (se_request_exit). Under
+// graceloader F1 reboots to the launcher and this never runs; kept so
+// the textures have a matching unload.
+static void on_shutdown(void* user) {
+    (void)user;
+    ship_shutdown();
+}
+
 // Hand the loop to the engine. Does not return under graceloader: F1
 // reboots to the launcher.
 void app_main(void) {
@@ -273,6 +290,7 @@ void app_main(void) {
         .on_update   = on_update,  // required
         .on_backdrop = on_backdrop,
         .on_render   = on_render,
+        .on_shutdown = on_shutdown,
     };
     se_run(&cfg, &cb, NULL);
 }

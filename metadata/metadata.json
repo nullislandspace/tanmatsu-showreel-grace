@@ -18,7 +18,11 @@
       "interpreter": "at.cavac.graceloader",
       "executable": "app.so",
       "assets": [
-        {"source_file": "app.so", "target_file": "app.so"}
+        {"source_file": "app.so", "target_file": "app.so"},
+        {"source_file": "plate_riveted.png", "target_file": "plate_riveted.png"},
+        {"source_file": "plate_brushed.png", "target_file": "plate_brushed.png"},
+        {"source_file": "plate_gunmetal.png", "target_file": "plate_gunmetal.png"},
+        {"source_file": "plate_tread.png", "target_file": "plate_tread.png"}
       ]
     }
   ]
