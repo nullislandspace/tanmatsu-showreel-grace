@@ -23,3 +23,7 @@ extern scene_def_t const SCENE_SPACESTATION_FLYBY;
 
 // Development: orbits each asset in turn (one named shot per asset).
 extern scene_def_t const SCENE_ASSET_VIEWER;
+
+// Development: the sky/ground backdrop under every camera attitude
+// (level, a full roll, pitching).
+extern scene_def_t const SCENE_HORIZON_TEST;

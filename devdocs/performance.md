@@ -253,6 +253,14 @@ right marauder fills half the screen, so this scene has the least headroom.
 191.6 s, i.e. about 7x slower than real time. Per frame: JPEG encode ~200 ms,
 SD write ~23 ms, 12–30 KB.
 
+**Sky/ground backdrop** (`perf scene=horizon`, the dev scene, 12 s): 30 fps throughout.
+`wait` (the PPA fills plus the CPU's share) is 2.5 ms with the camera level: two fills,
+where the space backdrop's one full-screen fill leaves ~1.8 ms. While the camera rolls
+it rises to 4–7.4 ms, because the PPA fills whole rows only, so the CPU paints the
+wedge between a tilted horizon and the fills. Near 90° of roll that is up to half the
+screen: ~5 ms. Space scenes are unaffected: the turntable frames are bit-identical to
+their references.
+
 ### Reproducing
 
 Automated (the app runs the test and returns to the launcher by itself):

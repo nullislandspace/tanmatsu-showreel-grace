@@ -130,17 +130,20 @@ static void pursuit_enter(void) {
     se_light_set(&(se_light_t){.x = -500.0f, .y = 350.0f, .z = -60.0f, .brightness = 0.8f, .two_sided = true});
 }
 
-static void pursuit_submit(double td) {
-    float const t = (float)td;
-
-    // Camera: riding with the formation (the right ship's slot, not its
-    // weave, so the ships move in the frame), aimed between the two ships,
-    // with a slow drift.
+// Riding with the formation (the right ship's slot, not its weave, so
+// the ships move in the frame), aimed between the two ships, with a slow
+// drift.
+static void pursuit_camera(double td) {
+    float const  t      = (float)td;
     vec3_t const centre = formation_centre(t);
     vec3_t const bob    = v3(CAM_BOB * sinf(0.7f * t), CAM_BOB * sinf(0.9f * t + 1.0f), 0.0f);
     vec3_t const eye    = v3_add(v3_add(v3_add(centre, SLOT_YELLOW), v3(-CAM_RIGHT, CAM_UP, CAM_BACK)), bob);
     vec3_t const mid    = v3_scale(v3_add(v3_add(centre, SLOT_GREEN), v3_add(centre, SLOT_YELLOW)), 0.5f);
     camera_look_at(eye, mid, 0.0f);
+}
+
+static void pursuit_submit(double td) {
+    float const t = (float)td;
     starfield_submit();
 
     xform_t const green  = ship_pose(SLOT_GREEN, &WEAVE_GREEN, t);
@@ -158,5 +161,6 @@ scene_def_t const SCENE_MARAUDER_PURSUIT = {
     .init     = pursuit_init,
     .shutdown = pursuit_shutdown,
     .enter    = pursuit_enter,
+    .camera   = pursuit_camera,
     .submit   = pursuit_submit,
 };

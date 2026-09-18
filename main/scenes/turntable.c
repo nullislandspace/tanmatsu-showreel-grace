@@ -84,9 +84,12 @@ static void turntable_enter(void) {
     });
 }
 
-static void turntable_submit(double t) {
+static void turntable_camera(double t) {
+    (void)t;
     render_set_camera(0.0f, 0.0f);
+}
 
+static void turntable_submit(double t) {
     // Wrap the angles so the float trig keeps its precision on long runs.
     float const   yaw   = (float)fmod(YAW_RATE * t, 2.0 * M_PI);
     float const   pitch = NOD_AMP * sinf((float)fmod(NOD_RATE * t, 2.0 * M_PI));
@@ -108,5 +111,6 @@ scene_def_t const SCENE_TURNTABLE = {
     .init     = turntable_init,
     .shutdown = turntable_shutdown,
     .enter    = turntable_enter,
+    .camera   = turntable_camera,
     .submit   = turntable_submit,
 };

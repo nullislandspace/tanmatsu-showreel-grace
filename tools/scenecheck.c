@@ -28,7 +28,9 @@
 //
 //  Before the scenes, a self-test runs synthetic cases the checker must
 //  catch (an eye 0.3 from a box, two boxes overlapping, one textured
-//  triangle over the cap) and one it must pass.
+//  triangle over the cap) and one it must pass, and the horizon
+//  (horizon.c) is tested against the projection over random camera
+//  poses, upside down included.
 //
 //  Usage: scenecheck [-v] [scene ...]    (default: every scene below)
 //  Exit status 0 = no failures, 1 = a scene failed, 5 = usage or the
@@ -41,6 +43,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "horizon.h"
 #include "mesh_render.h"
 #include "scenes/scenes.h"
 #include "synthengine3d.h"
@@ -67,6 +70,7 @@ static check_t const CHECKS[] = {
     {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, NULL, NULL},
     {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},
     {&SCENE_ASSET_VIEWER, 0.0f, NULL, NULL, NULL},
+    {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL},
 };
 #define CHECK_N ((int)(sizeof(CHECKS) / sizeof(CHECKS[0])))
 
@@ -471,6 +475,7 @@ static int check_scene(check_t const* c) {
         double const t = (double)f / FPS;
         s_obj_n        = 0;
         s_n_tri = s_n_ttri = s_n_line = s_n_point = 0;
+        if (sc->camera) sc->camera(t);
         if (sc->submit) sc->submit(t);
         char const* shot = sc->shot ? sc->shot(t) : NULL;
         frame_end(f, (float)t, shot && shot[0] ? shot : "-");
@@ -615,13 +620,53 @@ static void st_submit(double t) {
     }
 }
 
+// The horizon (horizon.c) against the projection itself: for random
+// camera poses -- rolled past 90 degrees too -- far points below eye
+// height must land on the ground side of the line, far points above it
+// on the sky side.
+static bool horizon_test(void) {
+    unsigned seed = 7;
+    int      bad = 0, tested = 0;
+    for (int i = 0; i < 2000; i++) {
+        seed              = seed * 1664525u + 1013904223u;
+        float const yaw   = (float)(seed >> 8) / 16777216.0f * 6.2831853f;
+        seed              = seed * 1664525u + 1013904223u;
+        float const pitch = ((float)(seed >> 8) / 16777216.0f - 0.5f) * 2.6f;  // +-75 degrees
+        seed              = seed * 1664525u + 1013904223u;
+        float const roll  = ((float)(seed >> 8) / 16777216.0f - 0.5f) * 6.2831853f;
+        render_set_camera_6dof(3.0f, 5.0f, -2.0f, yaw, pitch, roll);
+        horizon_t const hz = horizon_current();
+        for (int k = 0; k < 16; k++) {
+            float const a = yaw + ((float)k - 7.5f) * 0.2f;  // across the view
+            for (int s = -1; s <= 1; s += 2) {
+                vec3_t const p = v3(3.0f + 5000.0f * sinf(a), 5.0f + (float)s * 100.0f, -2.0f + 5000.0f * cosf(a));
+                vec3_t const c = sc_to_camera(p);
+                if (c.z < 1.0f) continue;
+                float sx, sy;
+                sc_project(c, &sx, &sy);
+                if (sx < 0.0f || sx > DISPLAY_LOG_W || sy < 0.0f || sy > DISPLAY_LOG_H) continue;
+                bool const below  = sy > horizon_y(&hz, sx);
+                bool const ground = s < 0;
+                tested++;
+                if (below != (ground == hz.ground_below)) bad++;
+            }
+        }
+    }
+    if (bad || tested < 1000) {
+        fprintf(stderr, "scenecheck self-test: horizon wrong for %d of %d points\n", bad, tested);
+        return false;
+    }
+    return true;
+}
+
 static bool self_test(void) {
     static char const* const NAME[ST_COUNT] = {"clean", "near plane", "contact", "list cap"};
-    scene_def_t const        st             = {"selftest", 0.2f, st_init, st_shutdown, NULL, st_submit, NULL};
-    check_t const            c              = {&st, 0.0f, NULL, NULL, NULL};
-    FILE* const              keep           = s_out;
-    bool                     ok             = true;
-    s_out                                   = fopen("/dev/null", "w");
+    scene_def_t const        st             = {
+                           .name = "selftest", .duration = 0.2f, .init = st_init, .shutdown = st_shutdown, .submit = st_submit};
+    check_t const c    = {&st, 0.0f, NULL, NULL, NULL};
+    FILE* const   keep = s_out;
+    bool          ok   = true;
+    s_out              = fopen("/dev/null", "w");
     for (s_st_case = 0; s_st_case < ST_COUNT; s_st_case++) {
         int const  fails = check_scene(&c);
         bool const want  = s_st_case != ST_CLEAN;
@@ -633,7 +678,7 @@ static bool self_test(void) {
     }
     fclose(s_out);
     s_out = keep;
-    return ok;
+    return ok && horizon_test();
 }
 
 int main(int argc, char** argv) {
@@ -641,7 +686,7 @@ int main(int argc, char** argv) {
     bool any = false;
     s_out    = stdout;
     if (!self_test()) return 5;
-    fprintf(s_out, "self-test: clean, near plane, contact and list-cap cases behave\n\n");
+    fprintf(s_out, "self-test: clean, near plane, contact and list-cap cases behave; horizon sides OK\n\n");
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0)
             s_verbose = true;

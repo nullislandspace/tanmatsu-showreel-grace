@@ -6,20 +6,27 @@
 //  duration, and loops. Every scene is timed from the show clock
 //  (showtime.h), so the reel is a pure function of show time too.
 //
-//  Per frame: showtime_frame(), then reel_frame(), then (between
-//  scene_begin and scene_prepare) reel_submit().
+//  Per frame: showtime_frame(), then reel_frame(), then reel_camera(),
+//  the backdrop (reel_backdrop()), and (between scene_begin and
+//  scene_prepare) reel_submit().
 // =====================================================================
 
 #include <stdbool.h>
+#include "backdrop.h"
 
 // Initialise every scene (loads all assets). Once, from on_init.
 void reel_init(char const* asset_dir);
 void reel_shutdown(void);
 
 // Advance the playlist if the current scene has run its course.
-void reel_frame(void);
-// Draw the current scene at the current show time.
-void reel_submit(void);
+void              reel_frame(void);
+// Set the current scene's camera for the current show time. First thing
+// in a frame: the backdrop (reel_backdrop) needs it.
+void              reel_camera(void);
+// The current scene's backdrop.
+backdrop_t const* reel_backdrop(void);
+// Draw the current scene at the current show time (camera already set).
+void              reel_submit(void);
 
 // Skip to the next scene in the playlist.
 void reel_next(void);

@@ -14,6 +14,8 @@ set(APP_SOURCES
     main/reel.c
     main/xform.c
     main/camera.c
+    main/horizon.c
+    main/backdrop.c
     main/mesh.c
     main/mesh_render.c
     main/assets/texcache.c
@@ -27,6 +29,7 @@ set(APP_SOURCES
     main/assets/laser.c
     main/scenes/turntable.c
     main/scenes/asset_viewer.c
+    main/scenes/horizon_test.c
     main/scenes/marauder_pursuit.c
     main/scenes/spacestation_flyby.c
     main/profile.c

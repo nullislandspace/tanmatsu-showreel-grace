@@ -27,11 +27,12 @@
 #include <stdint.h>
 
 typedef enum {
-    PROF_FILL = 0,  // enqueue the PPA FILL (or the CPU fallback clear)
+    PROF_FILL = 0,  // queue the backdrop's PPA fills (backdrop_begin)
     PROF_SUBMIT,    // camera + model transform + back-face cull + scene_tri
                     // (which includes the engine's per-face lighting)
     PROF_PREPARE,   // scene_prepare: engine cull + order, no pixels
-    PROF_WAIT,      // se_ppa_wait_job: fill still running when the CPU was done
+    PROF_WAIT,      // backdrop_finish: fills still running when the CPU was done, plus the CPU's share (horizon wedge,
+                    // fallback)
     PROF_RASTER,    // scene_rasterize: flat triangles, textured ones, then edges
     PROF_BLIT,      // engine present: frame handed to the LCD (se_present_stats)
     PROF_VSYNC,     // engine present: idle until the tearing-effect signal

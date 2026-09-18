@@ -68,6 +68,16 @@ static void orbit(double t, float d, float h) {
     camera_look_at(eye, v3(0.0f, 0.0f, 0.0f), 0.0f);
 }
 
+static void viewer_camera(double t) {
+    shot_t const shot = shot_at(t);
+    double const lt   = t - (double)shot * ASSET_SECS;  // time within the shot
+    if (shot == SHOT_STATION) {
+        orbit(lt * 0.3, 62.0f, 14.0f);
+    } else {
+        orbit(lt, 1.6f, 0.35f);
+    }
+}
+
 static void viewer_submit(double t) {
     shot_t const shot = shot_at(t);
     double const lt   = t - (double)shot * ASSET_SECS;  // time within the shot
@@ -75,13 +85,11 @@ static void viewer_submit(double t) {
 
     switch (shot) {
         case SHOT_PLAYER:
-            orbit(lt, 1.6f, 0.35f);
             starfield_submit();
             player_ship_submit(&x, 1.0f, t);
             break;
         case SHOT_MARAUDER_GREEN:
         case SHOT_MARAUDER_YELLOW: {
-            orbit(lt, 1.6f, 0.35f);
             starfield_submit();
             marauder_livery_t const l = shot == SHOT_MARAUDER_GREEN ? MARAUDER_GREEN : MARAUDER_YELLOW;
             marauder_submit(&x, l, 1.0f, t, (unsigned)l + 1u);
@@ -95,7 +103,6 @@ static void viewer_submit(double t) {
         }
         case SHOT_STATION:
         default:
-            orbit(lt * 0.3, 62.0f, 14.0f);
             starfield_submit();
             x.r = mat3_rot_z((float)fmod(STATION_SPIN * t, 2.0 * M_PI));
             station_submit(&x);
@@ -113,6 +120,7 @@ scene_def_t const SCENE_ASSET_VIEWER = {
     .init     = viewer_init,
     .shutdown = viewer_shutdown,
     .enter    = viewer_enter,
+    .camera   = viewer_camera,
     .submit   = viewer_submit,
     .shot     = viewer_shot,
 };

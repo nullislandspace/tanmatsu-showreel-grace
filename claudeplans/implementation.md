@@ -403,7 +403,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 | 8.1 | User confirms P-1…P-4 and the title-line layout | done | D-29: P-1…P-3 accepted; sky/ground as PPA fills (from Stunt Racer) instead of P-4; "Superior" larger so both lines are the same length; title textures from the hero ship / green marauder |
 | 8.2 | `make scenecheck`: host stand-in engine (`tools/host/`), scenes and assets compiled on the host; near-plane margin, caps, clearances, framing. Run on the two existing scenes (it must reproduce F-22 on the old pursuit camera) | done | `tools/scenecheck.c`, `tools/host/` (engine stand-in + pax/ESP header stand-ins; the real engine headers for the types). `mesh_t.name` added for object labels; `mesh_render.c` built with `-Dmesh_submit=mesh_submit_real` so the checker wraps it without `#ifdef`s. Built-in self-test (clean / near / contact / cap). All four scenes OK in ~2 s; the old pursuit camera fails as it should (F-23). `flame.c` now includes `<stddef.h>` (it relied on pax for `NULL`) |
 | 8.2a | Engine: the depth scale follows `RENDER_NEAR_CLIP_Z` (D-30) | done | `SCENE_DEPTH_SCALE = 64000 × near` in `se_scene.c` (the only definition; every depth encode goes through it); comments in `se_config.h`, `docs/configuration.md` (its near-plane line was also stale: "fully behind is dropped" → clipping), CHANGELOG 2.0. Default near 0.5 → 32000.0f exactly: turntable shots bit-identical to the refs on the badge (`make testcompare`, 3× identical). Not run on the badge with a different near plane |
-| 8.3 | `backdrop.c`: PPA sky/ground port from Stunt Racer; per-scene backdrop in `scene_def_t` (black or sky/ground); `on_backdrop`/`on_render` rewired; space scenes unchanged (hash-compare shots before/after) | todo | |
+| 8.3 | `backdrop.c`: PPA sky/ground port from Stunt Racer; per-scene backdrop in `scene_def_t` (black or sky/ground); `on_backdrop`/`on_render` rewired; space scenes unchanged (hash-compare shots before/after) | done | `main/backdrop.c` + `main/horizon.c` (engine-free, so `scenecheck` self-tests it: 2000 random poses, upside down included; a mutation (no upside-down case) is caught). `scene_def_t` gains `camera(t)` (D-31) and `backdrop`; all four scenes split. Dev scene `horizon` (unused): level pan, full roll, pitch, posts near and 2 km out. On the badge: turntable bit-identical to the refs; three fetched frames (roll ≈30°, ≈90°, 180°) correct, far post bases on the horizon; perf F-24 |
 | 8.4 | `xform_t` with a general 3×3 (non-uniform scale); meshcheck math tests | todo | |
 | 8.5 | Mesh parts: builders record the triangle range of each closed part; `mesh_submit_part()` | todo | |
 | 8.6 | `scenes/formation.c`: the pursuit's formation, weave and bank maths, shared; the pursuit renders unchanged (hash-compare shots before/after) | todo | |
@@ -520,6 +520,12 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
   - **Pursuit formation:** the two marauders pass within 0.43 of each other at 5.47 s.
   - **Documentation fix:** the horizontal field of view is 83° (±41.6°: focal length 450 on 800 px). The "42° FOV" in C2 and D-25 was the half-angle; the text is corrected.
 
+- **F-24** 2026-09-18, sky/ground backdrop on the badge (`perf scene=horizon`):
+  - 30 fps throughout.
+  - `wait` is 2.5 ms level (two fills), 4–7.4 ms while rolling. The PPA fills whole rows only (`se_ppa_fill(y_top, h)`), so a tilted horizon's wedge falls to the CPU: up to half the screen near 90° of roll, ~5 ms.
+  - If a planet scene rolls its camera steeply for long, the options are a rectangle fill in the engine's PPA helper (an engine change: ask, D-15) or splitting the wedge into row bands.
+  - Also: Stunt Racer's backdrop assumed the ground below the line; the port detects upside down from the camera's up axis (cos pitch · cos roll).
+
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
 - **D-2** User: the player ship is the vendored synthracer ship.
@@ -560,6 +566,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
   - "Superior" is set larger so both lines are the same length.
   - Solid sky is fine, and large areas should be painted with the PPA, as Stunt Racer does: sky and ground fills with a CPU wedge for a rolled horizon (C4.3 `backdrop`).
 - **D-30** 2026-09-18, user: fix the engine depth-scale bug (F-22 side finding): the scale is derived from the near plane. Also, user: the marauders flying very close to each other in the pursuit (0.43 apart, F-23) is by design.
+- **D-31** 2026-09-18, Claude: scenes set their camera in a separate `camera(t)` callback, called before the backdrop is queued. The sky/ground backdrop needs the horizon, and so the camera, before the PPA starts. Keeping the fill ahead of `submit()` keeps it overlapped with the geometry work (Stunt Racer sets its camera in `on_update` for the same reason). Since scenes are pure functions of t, the split costs nothing.
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:

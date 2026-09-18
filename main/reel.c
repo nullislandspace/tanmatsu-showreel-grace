@@ -18,6 +18,7 @@ static scene_def_t const* const ALL_SCENES[] = {
     &SCENE_SPACESTATION_FLYBY,
     &SCENE_TURNTABLE,
     &SCENE_ASSET_VIEWER,
+    &SCENE_HORIZON_TEST,
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
@@ -81,6 +82,14 @@ void reel_frame(void) {
     // time is a running sum of 1/fps steps, which lands a rounding error
     // short of the duration and would otherwise render one extra frame.
     if (reel_scene_time() >= (double)s_cur->duration - 1e-6) reel_next();
+}
+
+void reel_camera(void) {
+    if (s_cur->camera) s_cur->camera(reel_scene_time());
+}
+
+backdrop_t const* reel_backdrop(void) {
+    return &s_cur->backdrop;
 }
 
 void reel_submit(void) {

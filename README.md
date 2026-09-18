@@ -28,9 +28,14 @@ show clock leaves out), **F1** returns to the launcher.
 
 ## How it is built
 
-- **Scenes** (`main/scenes/`) are pure functions of scene time: `submit(t)` sets the
-  camera and draws exactly instant t, with no state from frame to frame. Ships follow
-  Catmull-Rom paths (`main/xform.c`), face their velocity and bank into turns.
+- **Scenes** (`main/scenes/`) are pure functions of scene time: `camera(t)` sets the
+  camera and `submit(t)` draws exactly instant t, with no state from frame to frame.
+  Ships follow Catmull-Rom paths (`main/xform.c`), face their velocity and bank into
+  turns.
+- **The backdrop** (`main/backdrop.c`) is painted by the PPA, not the CPU: black space,
+  or sky and ground split at the horizon (`main/horizon.c`, as in Stunt Racer, but
+  also upside down). A scene declares which in its `scene_def_t`; the camera is set
+  first so the fills can run while the scene submits.
 - **The show clock** (`main/showtime.c`) is the only time source: the wall clock, or
   fixed steps (for the video export and the shot tests).
 - **Assets** (`main/assets/`) are generators any scene can reuse: the player's ship, the

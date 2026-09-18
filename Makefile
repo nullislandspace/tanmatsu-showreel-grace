@@ -273,7 +273,7 @@ meshcheck:
 # every clipped frame. mesh_render.c is built on its own, with its
 # mesh_submit renamed, so the checker can wrap it.
 SCENECHECK_CFLAGS := -O2 -Wall -Wextra -DMESH_HOST -Itools/host -Itools -Imain -Isynthengine3D/include
-SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c main/mesh.c main/camera.c \
+SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c main/mesh.c main/camera.c main/horizon.c \
                      $(wildcard main/assets/*.c) $(wildcard main/scenes/*.c)
 
 .PHONY: scenecheck

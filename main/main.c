@@ -11,12 +11,13 @@
 //  (showtime.h), built from shared assets (assets/). This file only
 //  runs the frame: clock, backdrop, submit, rasterize, stats, keys.
 //
-//  The black is a PPA FILL, not a CPU clear. The framebuffers live in
-//  PSRAM, so se_run's default pax_background() clear would push 768 KB
-//  of RGB565 through the CPU every frame with nothing overlapping it.
-//  se_ppa_fill() hands that to the PPA and returns immediately, and the
-//  frame is split so the geometry work runs while the hardware fills
-//  (see on_backdrop / on_render below).
+//  The backdrop (black space, or sky and ground) is painted by the PPA,
+//  not the CPU (backdrop.h). The framebuffers live in PSRAM, so se_run's
+//  default pax_background() clear would push 768 KB of RGB565 through
+//  the CPU every frame with nothing overlapping it. se_ppa_fill() hands
+//  that to the PPA and returns immediately, and the frame is split so
+//  the geometry work runs while the hardware fills (see on_backdrop /
+//  on_render below).
 //
 //  Note: the graceloader template called gpio_install_isr_service(0),
 //  which the engine does NOT do. Nothing here installs a GPIO ISR, so it
@@ -28,6 +29,7 @@
 #ifdef SHOWREEL_EXPORT_MJPEG
 #include "export_mjpeg.h"
 #endif
+#include "backdrop.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -40,11 +42,6 @@
 
 static char const TAG[] = "showreel";
 
-// Not handed to se_app_config_t.backdrop_argb: that field is only used
-// when no on_backdrop callback is registered, and this app registers
-// one. Alpha is ignored for an RGB565 target.
-#define BACKDROP_ARGB 0xFF000000u
-
 // Same renderer for both halves of the split -- prepare builds what
 // rasterize consumes, so they must agree. One hull filling the screen
 // is light overdraw, the case SE_RENDER_RAYCAST's per-pixel edge tests
@@ -52,13 +49,7 @@ static char const TAG[] = "showreel";
 // is there to settle it once the reel has denser items to measure.
 #define RENDER_MODE SE_RENDER_ZBUFFER
 
-// The frame's only PPA job. Ids are ours to scheme and the frame drains
-// its own (the wait below), so restarting at 0 every frame is fine.
-#define JOB_CLEAR 0u
-
-static bool s_ppa_up        = false;  // compositor came up in on_init
-static bool s_fill_inflight = false;  // this frame's FILL was accepted
-static bool s_shot_pending  = false;  // P pressed; capture at end of frame
+static bool s_shot_pending = false;  // P pressed; capture at end of frame
 
 // Once-a-second profiling, two lines, in the same shape as Stunt Racer's:
 //
@@ -156,12 +147,9 @@ static void on_init(void* user) {
     se_splash();
 
     // Bring up the PPA compositor (registers the FILL client and starts
-    // the engine's pump task). A failure is logged and degrades to the
-    // CPU clear in on_backdrop -- slower, never a blank screen.
-    s_ppa_up = se_ppa_init();
-    if (!s_ppa_up) {
-        ESP_LOGW(TAG, "PPA unavailable -- falling back to CPU backdrop clear");
-    }
+    // the engine's pump task). A failure is logged and degrades to
+    // painting the backdrop on the CPU -- slower, never a blank screen.
+    backdrop_init();
 
     // Every scene and its assets (textures from wherever graceloader
     // started us: the SD card install, /sd/apps/at.cavac.showreel). After
@@ -229,36 +217,27 @@ static void on_update(float dt, void* user) {
     reel_frame();
 }
 
-// Start of frame. Enqueue the black FILL, then do every bit of CPU work
-// that does NOT touch framebuffer pixels while the PPA runs it: the
-// camera, the model transform, the triangle/edge submission and the
+// Start of frame. Set the camera, queue the backdrop's PPA fills (the
+// horizon of a sky/ground backdrop needs the camera), then do every bit
+// of CPU work that does NOT touch framebuffer pixels while the PPA runs
+// them: the model transforms, the triangle/edge submission and the
 // engine's cull + order pass. scene_begin() and scene_prepare() are
 // documented as pixel-free (se_scene.h), which is exactly what makes
-// them safe to overlap with a hardware blit into the framebuffer.
+// them safe to overlap with a hardware fill of the framebuffer.
 static void on_backdrop(pax_buf_t* fb, void* user) {
     (void)user;
 
+    prof_begin(PROF_SUBMIT);
+    reel_camera();
+    prof_end(PROF_SUBMIT);
+
     prof_begin(PROF_FILL);
-    s_fill_inflight = false;
-    if (s_ppa_up) {
-        // Whole screen, in logical rows -- pax_buf_get_height() is
-        // orientation-aware, so this is the 480 the ship projects into
-        // rather than the panel's raw 800.
-        s_fill_inflight = se_ppa_fill(fb, JOB_CLEAR, 0, pax_buf_get_height(fb), BACKDROP_ARGB);
-    }
-    if (!s_fill_inflight) {
-        // Refused (queue full / unsupported orientation) or PPA never
-        // came up. Clear on the CPU instead; must NOT wait on a job id
-        // whose submit returned false. Timed as "fill" too, so a PPA
-        // that has silently stopped working shows up as this phase
-        // jumping from ~0 to several milliseconds.
-        pax_background(fb, BACKDROP_ARGB);
-    }
+    backdrop_begin(fb, reel_backdrop());
     prof_end(PROF_FILL);
 
     prof_begin(PROF_SUBMIT);
     scene_begin(fb);
-    reel_submit();  // the scene sets its camera first, then submits
+    reel_submit();
     prof_end(PROF_SUBMIT);
 
     prof_begin(PROF_PREPARE);
@@ -266,16 +245,15 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
     prof_end(PROF_PREPARE);
 }
 
-// Rest of frame: paint. The FILL has to be complete first -- the ship
-// writes into the middle of the screen the fill is blacking out, and a
-// fill still in flight would land on top of the hull.
+// Rest of frame: paint. The backdrop has to be complete first -- the
+// geometry is drawn over it, and a fill still in flight would land on
+// top of it. "wait" includes the CPU's share of the backdrop (a rolled
+// horizon's wedge, or everything if the PPA refused).
 static void on_render(pax_buf_t* fb, void* user) {
     (void)user;
 
     prof_begin(PROF_WAIT);
-    if (s_fill_inflight) {
-        se_ppa_wait_job(JOB_CLEAR);
-    }
+    backdrop_finish(fb);
     prof_end(PROF_WAIT);
 
     prof_begin(PROF_RASTER);

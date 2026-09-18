@@ -234,9 +234,13 @@ static void flyby_enter(void) {
     se_light_set(&(se_light_t){.x = -500.0f, .y = 350.0f, .z = -60.0f, .brightness = 0.8f, .two_sided = true});
 }
 
-static void flyby_submit(double td) {
+static void flyby_camera(double td) {
     float const t = (float)td;
     set_camera(shot_at(t), t);
+}
+
+static void flyby_submit(double td) {
+    float const t = (float)td;
     starfield_submit();
 
     xform_t const station = {mat3_rot_z(station_angle(t)), v3(0.0f, 0.0f, 0.0f), 1.0f};
@@ -264,6 +268,7 @@ scene_def_t const SCENE_SPACESTATION_FLYBY = {
     .init     = flyby_init,
     .shutdown = flyby_shutdown,
     .enter    = flyby_enter,
+    .camera   = flyby_camera,
     .submit   = flyby_submit,
     .shot     = flyby_shot,
 };

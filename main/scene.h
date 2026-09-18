@@ -14,6 +14,7 @@
 // =====================================================================
 
 #include <stdbool.h>
+#include "backdrop.h"
 
 typedef struct {
     char const* name;
@@ -25,9 +26,17 @@ typedef struct {
     void (*shutdown)(void);
     // The scene becomes current: set the light and anything else global.
     void (*enter)(void);
-    // Draw instant t (seconds since the scene started): set the camera
-    // first, then submit the geometry.
+    // Set the camera for instant t. Called first every frame, before the
+    // backdrop is queued: a sky/ground backdrop needs the horizon, so the
+    // camera, before the geometry is submitted -- and the PPA paints
+    // while submit() runs.
+    void (*camera)(double t);
+    // Draw instant t (seconds since the scene started): submit the
+    // geometry. The camera is already set.
     void (*submit)(double t);
     // Optional: the name of the shot running at t (logs and perf).
     char const* (*shot)(double t);
+    // What is behind everything (backdrop.h). Zero-initialised: black
+    // space.
+    backdrop_t backdrop;
 } scene_def_t;
