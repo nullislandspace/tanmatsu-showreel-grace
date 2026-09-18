@@ -78,7 +78,7 @@ Every animation is a **pure function of scene time t**, never accumulated per-fr
 - **Consequences for scenes and assets (all deterministic in t):**
   - Paths, the camera, station spin (`phase0 + ω·t`) and the turntable yaw/nod are all evaluated at t.
   - **Chase-cam "lag":** no stateful smoothing filter. The camera is placed from the player's path evaluated at `t − lag`, plus an offset.
-  - **Lasers:** a scripted fire schedule. A bolt's position is `muzzle(t_fire) + dir·speed·(t − t_fire)`, so there is no bolt pool state to integrate.
+  - **Lasers:** a scripted fire schedule. A shot is a beam lit for 0.12 s from the gun's *current* position to its target (D-24), so there is no projectile state at all.
   - **Flame flicker:** a hash of `floor(t·rate)`, interpolated between neighbouring samples, instead of a per-frame RNG step.
 - The engine's own dt (and `SE_FRAME_DT_MAX` clamp) is ignored by the reel.
 
@@ -106,10 +106,15 @@ main/assets/           one generator per asset, each: *_init(asset_dir) / *_shut
                        radii) for choreography
   starfield.c/.h       ~500 seeded directions, varied brightness/tint; submitted as scene_point at
                        camera + dir * 1000 (infinitely distant: rotation parallax only; z within depth range)
-  laser.c/.h           laser_submit_bolt(muzzle, dir, speed, t_since_fire): one emissive red scene_line
+  laser.c/.h           laser_submit_beam(muzzle, target, t, t_fire, style): a red scene_line while the shot is lit
+  texcache.c/.h        textures shared between assets (loaded once, by file name)
 main/scenes/
-  turntable.c          current main-screen behaviour, unused (not in playlist, still compiled)
+  marauder_pursuit.c   opening: the marauders in formation, close up, firing (added after the plan, D-25)
   spacestation_flyby.c
+  turntable.c          the original single item, unused (not in the playlist, still compiled)
+  asset_viewer.c       dev: orbits each asset in turn (not in the playlist)
+main/export_mjpeg.c/.h MJPEG video export, compile option SHOWREEL_EXPORT_MJPEG (added after the plan, D-26)
+main/third_party/stb_image_write.h  JPEG encoder for the export (public domain)
 main/objects/ship_model.h  unchanged (vendored)
 ```
 - **`main.c`:**
@@ -185,17 +190,19 @@ graceloader's `main/symbol_export/all` lacks `usb_serial_jtag_driver_install`, `
 - **Orientation:** forward = path tangent. Roll comes from turn rate, plus a scripted jink / barrel roll in the last shot.
 - **Gap timing:** the station's initial spin phase is solved at `enter` so a gap is centred on the player's crossing point at t_cross. This is the "daring" moment and needs no collision logic.
 
-**Shots (~20 s, then loop):**
-1. **0–5 s, establish:** a wide static camera looks at the turning station. The three ships approach from afar, flames lit.
-2. **5–10 s, chase cam:** smoothed offset behind and above the player. Spokes sweep past as it threads the gap (t ≈ 8.5).
-3. **10–14 s, exit side:** the camera looks back at the wheel. The player bursts through, and the marauders arc round the ring's rim.
-4. **14–20 s, reverse chase:** the camera is ahead of the player, looking back. The player jinks in the foreground, the marauders close in behind, and red bolts streak past (they miss).
+**Shots (20 s), as built:**
+1. **0–5 s, establish:** static camera behind and above the three ships (eye (−25, 40, 150)) as they fly away from it towards the turning wheel.
+2. **5–9.2 s, chase:** on the player's own path, 0.25 s behind and 0.9 above it. The camera threads the same gap at t ≈ 8.5, so the spokes sweep right past the lens.
+3. **9.2–12.6 s, exit:** static camera beyond the wheel (eye (14, 20, −80)) looking back: the player comes out of the gap towards the lens, green goes over the top of the ring, yellow round its left.
+4. **12.6–20 s, reverse chase:** camera 0.28 s ahead of the player, offset (1.3, 0.7), looking back at it. The marauders close to ~6 units, the player barrel-rolls (15.0–16.4 s), red laser beams flash past (they miss).
+
+Sun: far point light at (−500, 350, −60), 80%, so shots looking along and against the flight are both side-lit (F-20, 6.5).
 
 **Marauders:** two ships of the same type, differing only in livery:
 - **#1:** old, dirty **green** paint.
 - **#2:** darkened **yellow**.
 
-Both have **red** engine flames and fire **red** lasers, drawn as emissive `scene_line` bolts.
+Both have **red** engine flames and fire **red** lasers: beams (unlit `scene_line`s) lit for 0.12 s from the gun to the target (D-24).
 
 **New textures** (`tools/make_textures.py`, seeded, 64×64 unless noted):
 - `station_hull.png`
@@ -204,6 +211,17 @@ Both have **red** engine flames and fire **red** lasers, drawn as emissive `scen
 - `flame_red.png`: 64×8, white-hot to orange to deep red, the counterpart of `flame.png`.
 
 The spokes reuse `plate_gunmetal.png`.
+
+## Part C2: the `marauder_pursuit` scene (added, D-25)
+The opening (6 s, first in the playlist): the two marauders in a tight formation (±0.75 units, the right one 0.6 behind) cruising along −z at 14 u/s. Each weaves sideways and up/down, banks into it and rocks its wings, with its own frequencies. The camera rides with the formation 0.75 right of, 0.35 above and 0.9 behind the right ship, looking ~50° across the flight line at the pair. That is more than half the 42° horizontal FOV, so the beams, aimed at the unseen player 60 units ahead, run off the screen edge. The right ship is 400–500 px wide.
+
+## Part C3: MJPEG video export (added, D-26)
+Compile option `SHOWREEL_EXPORT_MJPEG` (CMake `option()`, OFF by default); `make export` builds it in `build-export/`, installs and starts it:
+- The show clock goes to fixed step at 30 fps from t = 0, and the reel restarts.
+- Each playlist scene plays once. Every finished frame is converted from the RGB565 framebuffer to RGB888 (logical orientation) and JPEG-encoded at quality 85 (`stb_image_write`), then appended as a `00dc` chunk.
+- At the end the AVI header totals and the `idx1` index are written and the app returns to the launcher.
+
+Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.avi -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart showreel.mp4`.
 
 ## Part D: step-by-step plan with status tracking
 
@@ -249,18 +267,21 @@ The spokes reuse `plate_gunmetal.png`.
 | 5.2 | `assets/starfield.c` | done | 600 stars (40% in a tilted band), power-law brightness, tints; `scene_point` at eye + dir·1000 |
 | 5.3 | `assets/station.c` (passes meshcheck) | done | `station_mesh.c` (pure) + `station.c`: hub, docking port, 8 spokes, ring (48 segs); 592 tris, 11 closed parts (meshcheck); the window band is centred by building the ring at z 0..depth, then shifting it |
 | 5.4 | `assets/marauder.c`, one type, green/yellow liveries, red flames (passes meshcheck) | done | `marauder_mesh.c` + `marauder.c`: lofted fuselage, delta wings, fins, nacelles, guns; 220 tris, 10 closed parts; liveries swap only the paint texture; red flames; `marauder_gun()` for lasers. New `mesh_loft` builder (tested in meshcheck, including clockwise input) |
-| 5.5 | `assets/laser.c` | done | `laser_submit_bolt(muzzle, dir, age, style)`: a pure function of age (speed 60, length 2, lifetime 1.2 s) |
+| 5.5 | `assets/laser.c` | done | First as bolts, then replaced by beams (D-24): `laser_submit_beam(muzzle, target, t, t_fire, style)`, lit 0.12 s, range 80 |
 | 5.6 | `scenes/asset_viewer.c` (unused dev scene, t-driven orbit per asset); automated shots of each asset → review; tune | done | `scenes/asset_viewer.c` (`assets`, 4 named shots × 8 s, not in the playlist). Perf per asset: F-19. Two frames fetched (marauder green at 12 s, station at 28 s): geometry, livery, red flames and stars correct. Tuning noted: the marauder paint repeat is dense (graph-paper look); the ring's window band only shows from oblique views |
 | **6** | **Scene `spacestation_flyby`** | | |
 | 6.1 | World layout, light, station phase solved so a gap is centred at t_cross | done | Station spins 0.15 rad/s; phase solved so the gap centre sits at (0, 12.5, 0) at t_cross = 8.5 s; far sun at (-500, 300, 400), 80% |
 | 6.2 | Paths (player through the gap; marauders round the ring, then converge), orientation, bank, jink | done | 13-point Catmull-Rom paths on a shared 1.7 s grid; poses face the velocity; bank ∝ lateral acceleration (0.06 rad per u/s², cap 0.9); player barrel roll 15.0–16.4 s. Host replica: clearance player↔spokes 3.44, green↔ring 6.08, yellow↔ring 7.51, chase camera 3.30 units |
-| 6.3 | Shot list: 4 shots with their cameras; ~20 s | done | establish 0–5 / chase 5–10 / exit 10–14 / reverse 14–20. The establish and exit eyes were chosen by a grid search on the host replica: the closest eye keeping all ships (and, for establish, the wheel) ≥ 25 px inside the frame |
-| 6.4 | Laser fire schedule (red bolts, near-misses) | done | Each marauder fires every 0.35 s from 12 s, guns alternating, aimed at the player 0.25 s ahead + a 1.6-unit hashed miss |
+| 6.3 | Shot list: 4 shots with their cameras; ~20 s | done | Final: establish 0–5 / chase 5–9.2 / exit 9.2–12.6 / reverse 12.6–20 (Part C). The establish eye came from a grid search on the host replica (the closest eye keeping all ships and the wheel ≥ 25 px inside the frame); the exit shot was re-framed after the first look (6.5) |
+| 6.4 | Laser fire schedule (red bolts, near-misses) | done | Each marauder fires every 0.35 s from 12 s, guns alternating, at the player + a 1.6-unit hashed miss; beams since D-24 |
 | 6.5 | Playlist = [spacestation_flyby]; automated shots at key instants (including mid-gap for near clipping) → review and tune; the user judges the final look | done | Playlist = [spacestation_flyby]. Frames checked: chase 8.3 s (the spokes clip cleanly past the lens: the near-clip check of 4.8 ✓), reverse 17 s. Fixes after the first look: sun moved to (-500, 350, -60) (the shots looking back saw only unlit faces); reverse camera closer; marauders close to ~6 units; exit shot re-framed to eye (14, 20, -80), 9.2–12.6 s. The user watched the full sequence on the badge: "looks quite OK" |
-| 6.6 | `perf scene=spacestation_flyby` → per-shot numbers; caps never hit; add a flyby section to `devdocs/performance.md` | todo | |
+| 6.6 | `perf scene=spacestation_flyby` → per-shot numbers; caps never hit; add a flyby section to `devdocs/performance.md` | done | F-20: 30 fps except the chase approach (23–25 fps, rast up to 48 ms while the textured wheel fills the screen); caps far from full. In `devdocs/performance.md` |
+| 6.7 | Opening scene `marauder_pursuit` (added, D-25) | done | Part C2. First in the playlist. 30 fps, rast 25.6 ms mean / 32.2 max (the close textured ship) |
+| 6.8 | Lasers as beams (added, D-24) | done | Bolts trailed from where the gun had been (behind a fast ship); beams start at the turret by construction |
+| 6.9 | MJPEG video export (added, D-26) | done | Part C3. 26 s of video in 191.6 s; 780 frames after the rounding fix (F-21) |
 | **7** | **Wrap-up** | | |
-| 7.1 | README (scene system, assets, N key, test automation), final pass on the tracking doc | todo | |
-| 7.2 | Commit and push graceloader, engine (V2.0), then the showreel with the submodule pointer. **Only when the user asks.** | todo | |
+| 7.1 | README (scene system, assets, N key, test automation), final pass on the tracking doc | done | README rewritten (reel, keys, layout, tests, export); `devdocs/performance.md` has the flyby, pursuit, per-asset and export numbers; this document brought up to date |
+| 7.2 | Commit and push graceloader, engine (V2.0), then the showreel with the submodule pointer. **Only when the user asks.** | done | Pushed at each milestone on request: graceloader `9f08def`, template `56b711c`, engine V2.0 `8b5897d`; the showreel up to the export commit and this documentation pass |
 
 **Standing rule (D-15):** if a step hits an engine problem, set that step to `blocked (engine: …)`, log a finding, and ask the user before doing anything else. The same applies to graceloader and launcher problems.
 
@@ -355,7 +376,7 @@ The spokes reuse `plate_gunmetal.png`.
 - **D-16** User: export the USJ driver from graceloader rather than using non-blocking stdin.
 - **D-17** User: test automation must be hands-free. The app waits for a debug command, runs the test, then exits to the launcher; mode switches are automated.
 - **D-18** User: graceloader changes go only through its existing Makefile targets (`sync-template`, which exports to `tanmatsu-template-grace`). The template gets its own commit and push, and the showreel takes the changes by merging from `upstream` (the template).
-- **D-14** Claude, pending review:
+- **D-14** Claude; the user watched the result and raised none of these, so they stand:
   - Points are 1 px, unlit, depth-tested, with a lazy PSRAM list.
   - Stars are placed at camera + dir·1000.
   - 1 world unit is about the player's wingspan; the station ring has radius 24, with 8 spokes.
@@ -384,7 +405,7 @@ The user is only asked for artistic judgement, and for any engine or loader prob
 - **Engine:** `src/se_scene.c`, `include/se_scene.h`, `include/se_config.h`, `docs/renderer.md`, `docs/objects.md`, `CHANGELOG.md`.
 - **Showreel:**
   - `main/main.c` and `main/ship.c`; `ship.c` is split into `assets/player_ship.c` and `assets/flame.c`.
-  - New: `showtime`, `reel`, `scene.h`, `xform`, `mesh`, `report`, `debugcon`, `assets/*`, `scenes/*`.
+  - New: `showtime`, `reel`, `scene.h`, `xform`, `camera`, `mesh`, `mesh_render`, `report`, `debugcon`, `devtest`, `assets/*` (incl. `texcache`), `scenes/*` (`marauder_pursuit`, `spacestation_flyby`, `turntable`, `asset_viewer`), `export_mjpeg` + `third_party/stb_image_write.h`.
   - `fakelib/liball.so` and headers, arriving via the `upstream` merge.
   - `tools/`: `testrun.py`, `recover.py`, `badgelink_retry.sh`, `png_diff.py`, `meshcheck.c`, `make_textures.py`.
   - `Makefile`, `CMakeLists.txt`, `metadata/metadata.json`, `tests/refs/`, `README.md`, `devdocs/performance.md`, `claudeplans/implementation.md`.

@@ -217,7 +217,52 @@ Reference shots for the engine regression check: `turntable` at 0 / 2.5 /
 5.0 s, stored as framebuffer hashes in `tests/refs/manifest.json`
 (deterministic across app restarts).
 
+## 2026-09-18: the reel (automated, `make testrun TEST="perf scene=..."`)
+
+Per-shot numbers from the device test runner (`SHOTPERF` records: every frame of
+the shot, not one-second samples). Engine V2.0 with near-plane clipping and
+`scene_point`; all textures in PSRAM.
+
+**Assets on their own** (`scene=assets`, the camera orbiting each for 8 s):
+
+| asset | fps | `rast` mean / max | flat + textured tris drawn |
+|---|---:|---:|---|
+| player ship (1.6 units away) | 30.0 | 8.1 / 10.0 ms | 96 + 64 |
+| marauder (1.6 units away) | 30.0 | 9.8 / 13.2 ms | 21 + 87 |
+| station (62 units away) | 29.9 | 14.8 / 15.2 ms | 12 + 273 |
+
+**`spacestation_flyby`** (20 s):
+
+| shot | fps | `rast` mean / max | tris / textured (max) |
+|---|---:|---:|---|
+| establish | 30.0 | 4.3 / 5.0 ms | 143 / 532 |
+| chase | **27.6** | **20.7 / 48.3 ms** | 102 / 330 |
+| exit | 30.0 | 7.4 / 15.9 ms | 157 / 415 |
+| reverse | 29.9 | 7.9 / 14.4 ms | 157 / 533 |
+
+The chase dips to **23–25 fps for about 3 s** (t ≈ 6–8.5 s), when the camera is
+right at the wheel and the textured ring and spokes fill the screen: fill-bound.
+No list comes near its cap (flat 4096, textured 1024, points 1024).
+
+**`marauder_pursuit`** (6 s): 30.0 fps, `rast` 25.6 ms mean / 32.2 ms max. The
+right marauder fills half the screen, so this scene has the least headroom.
+
+**Internal SRAM**: 152 KiB free, largest block 62 KiB, in every scene.
+
+**Video export** (`make export`, software JPEG at quality 85): 26.0 s of video in
+191.6 s, i.e. about 7x slower than real time. Per frame: JPEG encode ~200 ms,
+SD write ~23 ms, 12–30 KB.
+
 ### Reproducing
+
+Automated (the app runs the test and returns to the launcher by itself):
+
+```sh
+make cycle TEST="perf scene=spacestation_flyby"   # build, install, run, measure
+make testrun TEST="perf scene=assets"             # the app already running
+```
+
+Results land in `results/<time>-perf-<scene>/result.json`. By hand, as before:
 
 ```sh
 make install && make run
