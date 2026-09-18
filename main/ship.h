@@ -11,8 +11,8 @@
 #include <stdbool.h>
 
 // Load the hull's plate textures from `asset_dir` (the app's install
-// directory) into internal SRAM, and work out which plate each gold
-// face gets and where on it. Call once from on_init, before the first
+// directory) -- into PSRAM for now, see SHIP_TEXTURE_FLAGS in ship.c --
+// and work out which plate each gold face gets and where on it. Call once from on_init, before the first
 // ship_submit. Returns the number of plates that loaded; any plate that
 // failed leaves its faces in the flat gold, so the ship always draws.
 int ship_init(char const* asset_dir);

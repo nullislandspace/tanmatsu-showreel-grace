@@ -8,7 +8,7 @@ A demo reel for [SynthEngine3D](https://github.com/nullislandspace/synthengine3D
 against a black screen -- 169 vertices, 306 triangles and 84 outline edges, back-face
 culled and lit by the engine's positional light. The gold hull is textured with four
 bare-metal plates (riveted fuselage, brushed wings, gunmetal pods, tread-plate belly),
-loaded into internal SRAM, and both engine pods trail Frontier-style blue flames
+loaded into PSRAM for now, and both engine pods trail Frontier-style blue flames
 (emissive, textured, flickering). The reel itself is not designed yet; this is the first
 item.
 

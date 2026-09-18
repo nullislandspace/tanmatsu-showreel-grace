@@ -235,6 +235,16 @@ static void flames_update(float dt) {
     }
 }
 
+// Where the textures are loaded: PSRAM for now (flags 0), leaving the
+// scarce internal SRAM free. Measured frame-by-frame against internal
+// SRAM, PSRAM costs about 0.4 ms of textured pass (+4%, see
+// devdocs/performance.md): the five textures are 33 KB and mostly stay
+// in the PSRAM cache. Set to SE_TEXTURE_INTERNAL to take that back once
+// the reel is final and it is known whether SRAM can spare the 33 KB.
+#ifndef SHIP_TEXTURE_FLAGS
+#define SHIP_TEXTURE_FLAGS 0
+#endif
+
 int ship_init(char const* asset_dir) {
     plate_classify();
 
@@ -242,13 +252,11 @@ int ship_init(char const* asset_dir) {
     for (int p = 0; p < PLATE_COUNT; p++) {
         char path[256];
         snprintf(path, sizeof(path), "%s/%s", asset_dir ? asset_dir : ".", PLATE_FILES[p]);
-        // Internal SRAM: every drawn hull pixel fetches a texel, from
-        // wherever the face happens to map, so these are the reads that
-        // most want to be fast. Four 64x64 plates are 32 KB.
-        s_plate_tex[p] = se_texture_load(path, SE_TEXTURE_INTERNAL);
+        // Four 64x64 plates, 32 KB; placed per SHIP_TEXTURE_FLAGS.
+        s_plate_tex[p] = se_texture_load(path, SHIP_TEXTURE_FLAGS);
         if (s_plate_tex[p] != NULL) {
             loaded++;
-            if (!s_plate_tex[p]->internal) {
+            if ((SHIP_TEXTURE_FLAGS & SE_TEXTURE_INTERNAL) && !s_plate_tex[p]->internal) {
                 ESP_LOGW(TAG, "%s landed in PSRAM -- expect a slower hull", PLATE_FILES[p]);
             }
         } else {
@@ -256,11 +264,10 @@ int ship_init(char const* asset_dir) {
         }
     }
 
-    // The flame texture too: 1 KB, and its pixels are right behind the
-    // hull's, so it may as well sit in the same fast memory.
+    // The flame texture too: 1 KB, in the same memory as the plates.
     char path[256];
     snprintf(path, sizeof(path), "%s/%s", asset_dir ? asset_dir : ".", "flame.png");
-    s_flame_tex = se_texture_load(path, SE_TEXTURE_INTERNAL);
+    s_flame_tex = se_texture_load(path, SHIP_TEXTURE_FLAGS);
     if (s_flame_tex == NULL) {
         ESP_LOGW(TAG, "flame.png missing -- flames drawn flat blue");
     }

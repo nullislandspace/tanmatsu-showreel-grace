@@ -168,6 +168,41 @@ another (two revolutions each):
   internal block), and all five textures (four plates and the 1 KB flame)
   are in **internal SRAM**.
 
+## 2026-09-18: textures in internal SRAM vs PSRAM
+
+Same scene as above. A temporary build loaded every texture twice, once
+into internal SRAM and once into PSRAM, and switched between the two
+copies every frame. Neighbouring frames show nearly the same pose, so
+the two sets see the same mix of screen coverage, and the ~768 KB of
+framebuffer traffic between frames flushes the cache, so neither copy
+starts a frame warm. It ran 993 + 992 frames, about 7 turns of the ship;
+running means:
+
+| per frame | internal SRAM | PSRAM | difference |
+|---|---:|---:|---:|
+| textured pass | 10.04 ms | 10.42 ms | **+0.38 ms (+3.8%)** |
+| `rast` | 11.54 ms | 11.92 ms | +0.37 ms (+3.2%) |
+
+- The gap is real, not noise: after the first 5 s the running
+  difference stayed between +3.7% and +4.0% for the rest of the run. All
+  of it is in the textured pass.
+- It is small because PSRAM is read through the cache and the five
+  textures are only 33 KB (four 64x64 plates and the 64x8 flame), so most
+  texel reads hit. The textured loop is dominated by other work: the
+  per-pixel divide, the z-buffer and the framebuffer writes, which are
+  in PSRAM in both cases.
+- Larger textures would behave differently. A 256x256 texture is 128 KB
+  and would be evicted far more by framebuffer traffic. Not measured.
+- **Decision:** the showreel loads its textures into **PSRAM** for now
+  (`SHIP_TEXTURE_FLAGS 0` in `main/ship.c`). That leaves internal SRAM
+  free, and 0.4 ms is small against at least 14 ms of vsync slack. The
+  engine keeps the choice per texture (`SE_TEXTURE_INTERNAL`); revisit
+  in the final optimisation pass if it is needed.
+
+A quick check with the PSRAM default (no A/B code; 60 periods, not
+aligned to launch): 29.97 fps, `rast` mean 11.70 ms, least vsync slack
+13.26 ms.
+
 ### Reproducing
 
 ```sh
