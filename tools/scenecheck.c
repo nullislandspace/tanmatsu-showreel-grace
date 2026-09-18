@@ -69,6 +69,10 @@ typedef struct {
 static check_t const CHECKS[] = {
     {&SCENE_TITLE, 0.0f, NULL, NULL, NULL},
     {&SCENE_MARAUDER_APPROACH, 0.0f, NULL, NULL, NULL},
+    {&SCENE_PAD_STRAFE, 0.0f, NULL, "apron*-base*,player_ship*-base*",
+     "the base stands on the apron; the hero sits on the pad"},
+    {&SCENE_EMERGENCY_TAKEOFF, 0.0f, NULL, "apron*-base*,player_ship*-base*",
+     "the base stands on the apron; the hero starts on the pad"},
     {&SCENE_PLANET_LANDING, 0.0f, NULL, "apron*-base*,player_ship*-base*",
      "the base stands on the apron; the ship lands on the pad (part of the base)"},
     {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL},

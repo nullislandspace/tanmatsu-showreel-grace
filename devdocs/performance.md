@@ -261,6 +261,14 @@ fill-bound: the textured apron covers ~800×250 px from the viewer's orbit. Text
 runs at roughly 5 Mpx/s, so a screen-sized textured layer costs ~50 ms whatever the triangle
 count. Only what the PPA paints is free.
 
+**Planet scenes** (`perf scene=...`, 2026-09-19): planet_landing establish 24 / touchdown
+20 fps; marauder_approach 24 fps (the planet's textured disc, rast 37 ms); pad_strafe chase
+26 / **ground 10.6 fps** (rast 88 ms: halls, tanks and pad fill ~80% of the view);
+emergency_takeoff lift-off 19 / crossing 30 fps. The title holds 30 fps. What decides the
+frame rate is how much textured surface fills the frame, not the triangle count. Looking up
+at a ship against the PPA sky is cheap; looking along the ground at the works is not.
+Deferred to step 11.2 (F-26, F-28, D-33).
+
 **Sky/ground backdrop** (`perf scene=horizon`, the dev scene, 12 s): 30 fps throughout.
 `wait` (the PPA fills plus the CPU's share) is 2.5 ms with the camera level: two fills,
 where the space backdrop's one full-screen fill leaves ~1.8 ms. While the camera rolls

@@ -22,6 +22,12 @@ extern scene_def_t const SCENE_PLANET_LANDING;
 // Scene 3: the marauders fly towards the planet (medium close-up).
 extern scene_def_t const SCENE_MARAUDER_APPROACH;
 
+// Scene 4: the marauders strafe the pad round the landed hero ship.
+extern scene_def_t const SCENE_PAD_STRAFE;
+
+// Scene 5: the hero ship takes off and climbs between the marauders.
+extern scene_def_t const SCENE_EMERGENCY_TAKEOFF;
+
 // Opening: the two marauders in formation, from close behind, firing
 // at the (unseen) player.
 extern scene_def_t const SCENE_MARAUDER_PURSUIT;

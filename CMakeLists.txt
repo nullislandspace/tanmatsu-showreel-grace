@@ -43,6 +43,9 @@ set(APP_SOURCES
     main/scenes/title.c
     main/scenes/planet_landing.c
     main/scenes/marauder_approach.c
+    main/scenes/flight.c
+    main/scenes/pad_strafe.c
+    main/scenes/emergency_takeoff.c
     main/scenes/formation.c
     main/scenes/marauder_pursuit.c
     main/scenes/spacestation_flyby.c

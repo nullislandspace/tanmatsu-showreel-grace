@@ -238,10 +238,10 @@ Durations are first estimates, to be tuned per scene; total ≈ 1:50.
 | 1 | `title` | done | 3D title "Borderworlds:" / "Superior", drifting in, canted into the screen, on sky blue | 12.5 |
 | 2 | `planet_landing` | done | The hero ship lands on a planet; industrial buildings behind it, flare stacks burning | 12 |
 | 3 | `marauder_approach` | done | Medium close-up: the marauders fly towards that planet | 6 |
-| 4 | `pad_strafe` | new | Medium close-up: the marauders fire on the landed hero ship | 7 |
-| 5 | `emergency_takeoff` | new | The hero ship takes off in a hurry and climbs between the incoming marauders, firing blue lasers | 8 |
-| 6 | `marauder_pursuit` | exists | The marauders close up, firing red lasers (Part C2) | 6 |
-| 7 | `spacestation_flyby` | exists | The station pass (Part C) | 20 |
+| 4 | `pad_strafe` | done | Medium close-up: the marauders fire on the landed hero ship | 7 |
+| 5 | `emergency_takeoff` | done | The hero ship takes off in a hurry and climbs between the incoming marauders, firing blue lasers | 8 |
+| 6 | `marauder_pursuit` | done | The marauders close up, firing red lasers (Part C2) | 6 |
+| 7 | `spacestation_flyby` | done | The station pass (Part C) | 20 |
 | 8 | `warp_out` | new | The hero ship warps away; the marauders fly on for a few seconds, then warp too | 8 |
 | 9 | `asteroid_ambush` | new | Another system: the hero comes out of warp and hides behind an asteroid; the marauders arrive and pass it; the hero comes out behind them, gives chase and fires blue lasers | 16 |
 | 10 | `marauder_downfall` | new | Close-up of the marauders under blue fire; the yellow one explodes; a couple of seconds later the green one warps away | 9 |
@@ -422,14 +422,14 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 | 10.1 | Scene 1 `title`: layout solved on the host (left end ~5%, right end ~70%), drift-in, hold | done | `scenes/title.c`, first in the playlist. Cant 28°; the depth of the left end is solved so the ends land at 5% and 70% (scenecheck: both lines x 18..565 px). Line 1 drifts down from 0.3 s, line 2 up from 0.8 s, each over 4.5 s, then a 7.2 s hold: 12.5 s. Sky-blue PPA backdrop, no stars (D-34). Badge: 30 fps, rast 13 ms (max 19.6), ~364 textured tris; frames at 3 s and 9 s checked |
 | 10.2 | Scene 2 `planet_landing` | done | 12 s, 2 shots: establish (wide, from the south-west, 0–6 s) and touchdown (low beside the pad, looking up at the ship). Approach on a Catmull-Rom path nose first along +z, braking to a hover at 5.5 over the pad (7 s), sinking onto it (7.4–10.4 s), engines off by 11.2 s; pitch follows the descent and the braking. The ship is span 2 here: at span 1 scenecheck measured it at 37 px on touchdown. Badge: establish 24 fps, touchdown 20 fps after reframing (12.5 fps looking down at the pad: F-26); belly exactly on the pad (scenecheck contact 0.000). Also fixed: the scene was only in the playlist, not in ALL_SCENES (clang-format had reflowed that list), so it would have played uninitialised; both lists are now one scene per line and `reel_init` logs a playlist scene missing from ALL_SCENES |
 | 10.3 | Scene 3 `marauder_approach` | done | 6 s: the formation (shared `formation.c`, a looser pair: side by side, yellow a length back) flies along −z towards the terran planet (radius 520 at ~1500 units, lit from the right). Camera in the formation's frame behind-left of the pair, looking ahead past them; ships 116 and 155 px wide, planet ~400 px. Badge: 24 fps, rast 37 ms: the planet's textured disc (~120k px) is the cost (F-26). The 128×64 map shows big texels at this size; a finer map or the PPA-layer planet (9.4) are options for 11.2 |
-| 10.4 | Scene 4 `pad_strafe` | todo | |
-| 10.5 | Scene 5 `emergency_takeoff` | todo | |
+| 10.4 | Scene 4 `pad_strafe` | done | 7 s. The pass comes in from the south-west, with the sun at the marauders' backs (a first version from the north-east showed only the halls' unlit sides), low over the pad at ~4.3 s, and away over the works. Red beams every 0.17 s at aim points 2.2–5 units round the landed hero, never on it; an impact burst at each. Shots: chase (outside the trailing yellow ship, the green one ahead, the pad beyond) and ground (low south-west of the pad, the pair roaring over the camera). New `scenes/flight.c`: pose on a path (facing the velocity, banking) and on a line. Planet scale: hero span 2, marauders 1.8. Badge: chase 26 fps, ground **10.6 fps** (rast 88 ms: F-28) |
+| 10.5 | Scene 5 `emergency_takeoff` | done | 8 s. Ignition with a shudder, lift-off at 1.2 s, the nose swinging from level into the climb (2–4 s); the marauders' second pass head-on and descending, crossing at 5.5 s ±2.6 units (clearance 0.77); the hero fires blue at them 4.4–5.3 s, they fire just wide. Shots: lift-off (low, west of the pad, the ship broadside and lit against the sky; the first angle showed it in front of the big hall, then in silhouette) and crossing (riding behind the climbing hero, the pair passing either side). Badge: lift-off 19 fps, crossing 30 fps |
 | 10.6 | Scene 8 `warp_out` | todo | |
 | 10.7 | Scene 9 `asteroid_ambush` | todo | |
 | 10.8 | Scene 10 `marauder_downfall` | todo | |
 | 10.9 | Scene 11 `hero_rolls` | todo | |
 | **11** | **Full reel: integration** | | |
-| 11.1 | Playlist = all eleven in order (C4.1); scene-to-scene continuity (liveries, directions, where the sun is); the user watches the whole reel on the badge | todo | |
+| 11.1 | Playlist = all eleven in order (C4.1); scene-to-scene continuity (liveries, directions, where the sun is); the user watches the whole reel on the badge | in progress | 2026-09-19: the playlist holds the seven existing scenes in order (title, planet_landing, marauder_approach, pad_strafe, emergency_takeoff, marauder_pursuit, spacestation_flyby; ~72 s); installed for the user to watch. Scenes 8–11 are added as they are built |
 | 11.2 | `perf` per scene; the slow shots listed in `devdocs/performance.md`; performance decisions with the user (D-7), including the planet base's apron (F-26, D-33) | todo | |
 | 11.3 | Reference hashes for key frames of every scene (`testrefs`) | todo | |
 | 11.4 | MJPEG export of the full reel; the user checks the video | todo | |
@@ -536,6 +536,11 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
   - Options: shrink the apron to the pad's surroundings; or accept a lower frame rate in the planet scenes. The user keeps the apron as it is for now (D-33).
   - SRAM unchanged: 152 / 62 KiB.
 - **F-27** 2026-09-18: the lit apron (61, 51, 32) did not match the unlit PPA ground (99, 81, 57): a hard seam. Fixed by drawing the apron unlit (a flat plane takes one shade anyway) and taking the PPA ground from the texture's `mean_argb`: now (110, 90, 61) against (107, 89, 57). What remains visible is texture against flat colour.
+
+- **F-28** 2026-09-19, planet scenes on the badge: frame rate follows how much textured surface fills the view.
+  - Looking up at a ship against the sky, or across the plain: 20–30 fps (the sky and ground beyond the apron are PPA fills).
+  - Looking along the ground at the works: pad_strafe's ground shot, with the halls, tanks and pad filling ~80% of the frame, draws in 88 ms (10.6 fps).
+  - The shots are framed for the look; the frame rate is left for step 11.2 with F-26 and D-33.
 
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
