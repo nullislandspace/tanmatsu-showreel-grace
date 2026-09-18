@@ -15,6 +15,7 @@
 
 #include "ship.h"
 #include <math.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include "esp_log.h"
@@ -30,23 +31,25 @@ static char const TAG[] = "ship";
 // across at a playable distance. A showreel wants it filling the
 // screen, so this uses its own scale instead of the header's.
 
-#define SHIP_DIST_Z      3.0f  // world units in front of the eye
-#define SHIP_TARGET_SPAN 2.8f  // wingspan in world units
+#define SHIP_DIST_Z      3.0f   // world units in front of the eye
+#define SHIP_TARGET_SPAN 2.25f  // wingspan in world units
 // Lateral extent of the raw model, in model units (x spans -5.75..5.75).
 // From the mesh, not a free parameter: re-export the 3MF wider and this
 // is what has to change for SHIP_TARGET_SPAN to still mean what it says.
 #define SHIP_MODEL_SPAN  11.5f
 #define SHIP_SCALE       (SHIP_TARGET_SPAN / SHIP_MODEL_SPAN)
 
-// Why 2.8 and not bigger: only the span-to-distance ratio decides the
-// projected size, and the limit is not the flat wingspan -- it is
-// perspective on whichever corner of the hull the turntable has swung
-// nearest. Broadside, the near wing blows the silhouette up to ~719 px
-// across; nose-quartering with the nod at full tilt drives the roof up
-// towards the top edge. Swept over every (yaw, nod) pose this pair
-// leaves about 20 px of margin on the tightest one and never crosses
-// RENDER_NEAR_CLIP_Z. Enlarging the ship means shrinking SHIP_NOD_AMP
-// to pay for it.
+// Why 2.25: only the span-to-distance ratio decides the projected size,
+// and the limit is perspective on whatever the turntable swings nearest
+// -- not the flat wingspan. The engine flames (below) set it: they carry
+// the silhouette ~3.3 model units past the tail, so tail-on their tips
+// reach towards the camera and balloon, and broadside the ship is hull
+// plus flame long. Swept over every (yaw, nod) pose with the flames at
+// full flicker length, 2.25 leaves ~26 px on the tightest pose
+// (broadside), keeps the nearest point at z >= 1.08 (clear of
+// RENDER_NEAR_CLIP_Z), and puts the widest silhouette at ~652 px (the
+// hull alone: ~507 px). Without flames the hull alone fitted at 2.8.
+// Longer flames or a bigger ship means re-running that sweep.
 
 // The model is centred in x and z but base-anchored in y (belly at
 // y = 0, roof at 2.949), so the turntable axis has to run through the
@@ -99,10 +102,11 @@ static char const* const PLATE_FILES[PLATE_COUNT] = {
 #define PLATE_POD_MIN_X      4.2f
 #define PLATE_BELLY_NY       (-0.7f)
 // Model units covered by one repeat of a 64-texel plate. At the framing
-// distance a model unit is ~37 px, so 2.0 units puts a texel at ~1.2 px:
+// distance a model unit is ~29 px, so 2.5 units puts a texel at ~1.1 px:
 // just magnified, which keeps nearest-texel sampling from shimmering as
 // the hull turns. Smaller repeats alias; larger ones get blocky up close.
-#define PLATE_REPEAT         2.0f
+// Tied to SHIP_TARGET_SPAN: shrink the ship and this has to grow.
+#define PLATE_REPEAT         2.5f
 
 static se_texture_t* s_plate_tex[PLATE_COUNT];
 static uint8_t       s_tri_plate[SHIP_MODEL_TRI_COUNT];
@@ -170,6 +174,67 @@ static void plate_classify(void) {
     }
 }
 
+// --- Engine flames ----------------------------------------------------
+//
+// Frontier: Elite II style thruster flames: a solid spike behind each
+// engine pod, glowing blue, flickering in length. The pods are hexagonal
+// prisms (circumradius 0.75, centred at x = +-5.0, y = 1.299) whose rear
+// faces lie in the model's rearmost plane, z = -5.125, facing back.
+//
+// Each flame is a six-sided cone: its base is a hexagon on that rear
+// face, inset to FLAME_NOZZLE_R so a rim of pod shows round it, and its
+// tip sits FLAME_LENGTH behind, on the pod's axis. No base cap -- it
+// would sit flush against the pod face and never be seen.
+//
+// Submitted SE_TRI_EMISSIVE: a flame gives off light, so the scene
+// light must not shade its far side dark. Textured with flame.png, a
+// white-hot-to-deep-blue gradient along its length (u runs nozzle ->
+// tip), so the texel colours are exactly what reaches the screen. It
+// goes through the same back-face cull as the hull, so from the front
+// the hull hides it and from behind all six sides can show.
+#define FLAME_POD_X         5.0f  // model units, +- for the two pods
+#define FLAME_POD_Y         1.299038f
+#define FLAME_BASE_Z        (-5.125f)  // the pods' rear faces
+#define FLAME_NOZZLE_R      0.6f       // hexagon circumradius (pod: 0.75)
+#define FLAME_LENGTH        3.0f       // nominal; flicker scales it
+#define FLAME_SIDES         6
+// Texture u at the tip. Short of 1.0 so no pixel near the tip rounds up
+// into the next repeat and wraps back to the white-hot nozzle colour.
+#define FLAME_TIP_U         0.97f
+// Flat fallback if flame.png does not load: the mid-flame blue.
+#define FLAME_FALLBACK_ARGB 0xFF3C84FFu
+
+// Flicker: each frame each flame picks a random target length within
+// [MIN, MAX] x FLAME_LENGTH and moves most of the way there, so it
+// shimmers rather than strobing. The two flames are independent.
+// FLAME_LENGTH * FLICKER_MAX is what the framing sweep assumed (3.3).
+#define FLICKER_MIN  0.88f
+#define FLICKER_MAX  1.10f
+#define FLICKER_RATE 25.0f  // 1/s: how fast it chases the target
+
+static se_texture_t* s_flame_tex;
+static float         s_flame_len[2] = {FLAME_LENGTH, FLAME_LENGTH};
+static uint32_t      s_flicker_rng  = 0x9E3779B9u;
+
+// xorshift32 -> [0, 1). Visual only; nothing needs it to be good.
+static float flicker_rand(void) {
+    uint32_t x     = s_flicker_rng;
+    x             ^= x << 13;
+    x             ^= x >> 17;
+    x             ^= x << 5;
+    s_flicker_rng  = x;
+    return (float)(x >> 8) * (1.0f / 16777216.0f);
+}
+
+static void flames_update(float dt) {
+    float k = FLICKER_RATE * dt;
+    if (k > 1.0f) k = 1.0f;
+    for (int f = 0; f < 2; f++) {
+        float const target  = FLAME_LENGTH * (FLICKER_MIN + (FLICKER_MAX - FLICKER_MIN) * flicker_rand());
+        s_flame_len[f]     += (target - s_flame_len[f]) * k;
+    }
+}
+
 int ship_init(char const* asset_dir) {
     plate_classify();
 
@@ -190,6 +255,15 @@ int ship_init(char const* asset_dir) {
             ESP_LOGW(TAG, "%s missing -- those faces stay gold", PLATE_FILES[p]);
         }
     }
+
+    // The flame texture too: 1 KB, and its pixels are right behind the
+    // hull's, so it may as well sit in the same fast memory.
+    char path[256];
+    snprintf(path, sizeof(path), "%s/%s", asset_dir ? asset_dir : ".", "flame.png");
+    s_flame_tex = se_texture_load(path, SE_TEXTURE_INTERNAL);
+    if (s_flame_tex == NULL) {
+        ESP_LOGW(TAG, "flame.png missing -- flames drawn flat blue");
+    }
     return loaded;
 }
 
@@ -198,6 +272,8 @@ void ship_shutdown(void) {
         se_texture_unload(s_plate_tex[p]);
         s_plate_tex[p] = NULL;
     }
+    se_texture_unload(s_flame_tex);
+    s_flame_tex = NULL;
 }
 
 // --- Outline ----------------------------------------------------------
@@ -235,31 +311,90 @@ void ship_update(float dt) {
     if (s_yaw > 2.0f * (float)M_PI) s_yaw -= 2.0f * (float)M_PI;
     s_nod_t += SHIP_NOD_RATE * dt;
     if (s_nod_t > 2.0f * (float)M_PI) s_nod_t -= 2.0f * (float)M_PI;
+    flames_update(dt);
+}
+
+// This frame's model -> world transform: the trig for the turntable yaw
+// and the nod, taken once per frame.
+typedef struct {
+    float cy, sy, cp, sp;
+} pose_t;
+
+// Model units -> world: centre the mesh on its own axes, scale to the
+// framing above, yaw about its vertical axis, nod about its lateral
+// axis, then push it out in front of the camera.
+static inline void to_world(pose_t const* p, float x, float y, float z, float* wx, float* wy, float* wz) {
+    float const mx = x * SHIP_SCALE;
+    float const my = (y - SHIP_MODEL_MID_Y) * SHIP_SCALE;
+    float const mz = z * SHIP_SCALE;
+
+    float const ax = mx * p->cy + mz * p->sy;  // yaw about +y
+    float const az = -mx * p->sy + mz * p->cy;
+
+    *wx = ax;
+    *wy = my * p->cp - az * p->sp + SHIP_CENTER_Y;  // nod about +x
+    *wz = my * p->sp + az * p->cp + SHIP_DIST_Z;
+}
+
+// Back-face cull -- the engine will not do this (it sees only anonymous
+// projected triangles), and without it the far side of the hull
+// z-fights the near side as the turntable comes round. True if the
+// CCW-outward face (a, b, c) is turned towards the eye.
+static inline bool faces_camera(float const a[3], float const b[3], float const c[3], render_camera_t const* cam) {
+    float const ux = b[0] - a[0], uy = b[1] - a[1], uz = b[2] - a[2];
+    float const vx = c[0] - a[0], vy = c[1] - a[1], vz = c[2] - a[2];
+    float const nx  = uy * vz - uz * vy;
+    float const ny  = uz * vx - ux * vz;
+    float const nz  = ux * vy - uy * vx;
+    float const fcx = (a[0] + b[0] + c[0]) * (1.0f / 3.0f);
+    float const fcy = (a[1] + b[1] + c[1]) * (1.0f / 3.0f);
+    float const fcz = (a[2] + b[2] + c[2]) * (1.0f / 3.0f);
+    return nx * (cam->x - fcx) + ny * (cam->y - fcy) + nz * (cam->z - fcz) > 0.0f;
+}
+
+// One flame: the six-sided cone behind the pod at model x = pod_x.
+static void submit_flame(pose_t const* p, render_camera_t const* cam, float pod_x, float length) {
+    float rim[FLAME_SIDES][3];
+    for (int i = 0; i < FLAME_SIDES; i++) {
+        // Same angles as the pod's own hexagon, so the nozzle sits square
+        // in the pod face.
+        float const ang = (float)i * (2.0f * (float)M_PI / FLAME_SIDES);
+        to_world(p, pod_x + FLAME_NOZZLE_R * cosf(ang), FLAME_POD_Y + FLAME_NOZZLE_R * sinf(ang), FLAME_BASE_Z,
+                 &rim[i][0], &rim[i][1], &rim[i][2]);
+    }
+    float tip[3];
+    to_world(p, pod_x, FLAME_POD_Y, FLAME_BASE_Z - length, &tip[0], &tip[1], &tip[2]);
+
+    for (int i = 0; i < FLAME_SIDES; i++) {
+        // (rim[i+1], rim[i], tip) winds CCW-outward -- checked for all six
+        // sides when this was written; the reverse order faces inward.
+        float const* a = rim[(i + 1) % FLAME_SIDES];
+        float const* b = rim[i];
+        if (!faces_camera(a, b, tip, cam)) continue;
+        if (s_flame_tex != NULL) {
+            // u along the flame (nozzle 0 -> tip), v across one side.
+            // v stops short of 0 and 1 for the same reason as FLAME_TIP_U.
+            se_tex_vertex_t const tv[3] = {
+                {a[0], a[1], a[2], 0.0f, 0.98f},
+                {b[0], b[1], b[2], 0.0f, 0.02f},
+                {tip[0], tip[1], tip[2], FLAME_TIP_U, 0.5f},
+            };
+            scene_textured_tri(tv, s_flame_tex, SE_TRI_EMISSIVE);
+        } else {
+            scene_tri(a[0], a[1], a[2], b[0], b[1], b[2], tip[0], tip[1], tip[2], FLAME_FALLBACK_ARGB, SE_TRI_EMISSIVE);
+        }
+    }
 }
 
 void ship_submit(void) {
-    float const pitch = SHIP_NOD_AMP * sinf(s_nod_t);
-    float const cy = cosf(s_yaw), sy = sinf(s_yaw);
-    float const cp = cosf(pitch), sp = sinf(pitch);
+    float const  pitch = SHIP_NOD_AMP * sinf(s_nod_t);
+    pose_t const pose  = {cosf(s_yaw), sinf(s_yaw), cosf(pitch), sinf(pitch)};
 
-    // Model -> world, once per vertex: centre the mesh on its own axes,
-    // scale to the framing above, yaw about its vertical axis, nod about
-    // its lateral axis, then push it out in front of the camera.
-    static float wx[SHIP_MODEL_VERT_COUNT];
-    static float wy[SHIP_MODEL_VERT_COUNT];
-    static float wz[SHIP_MODEL_VERT_COUNT];
+    // Model -> world, once per vertex.
+    static float w[SHIP_MODEL_VERT_COUNT][3];
     for (size_t i = 0; i < SHIP_MODEL_VERT_COUNT; i++) {
-        ship_model_vert_t const* v  = &SHIP_MODEL_VERTS[i];
-        float const              mx = v->x * SHIP_SCALE;
-        float const              my = (v->y - SHIP_MODEL_MID_Y) * SHIP_SCALE;
-        float const              mz = v->z * SHIP_SCALE;
-
-        float const ax = mx * cy + mz * sy;  // yaw about +y
-        float const az = -mx * sy + mz * cy;
-
-        wx[i] = ax;
-        wy[i] = my * cp - az * sp + SHIP_CENTER_Y;  // nod about +x
-        wz[i] = my * sp + az * cp + SHIP_DIST_Z;
+        ship_model_vert_t const* v = &SHIP_MODEL_VERTS[i];
+        to_world(&pose, v->x, v->y, v->z, &w[i][0], &w[i][1], &w[i][2]);
     }
 
     // Every region is drawn: the racer hides the battery panel and the
@@ -270,24 +405,10 @@ void ship_submit(void) {
 
     for (size_t i = 0; i < SHIP_MODEL_TRI_COUNT; i++) {
         ship_model_tri_t const* t = &SHIP_MODEL_TRIS[i];
-        int const               a = t->a, b = t->b, c = t->c;
-
-        // CCW-outward face normal from two edges of the face.
-        float const ux = wx[b] - wx[a], uy = wy[b] - wy[a], uz = wz[b] - wz[a];
-        float const vx = wx[c] - wx[a], vy = wy[c] - wy[a], vz = wz[c] - wz[a];
-        float const nx = uy * vz - uz * vy;
-        float const ny = uz * vx - ux * vz;
-        float const nz = ux * vy - uy * vx;
-
-        // Back-face cull -- the engine will not do this (it sees only
-        // anonymous projected triangles), and without it the far side of
-        // the hull z-fights the near side as the turntable comes round.
-        float const fcx = (wx[a] + wx[b] + wx[c]) * (1.0f / 3.0f);
-        float const fcy = (wy[a] + wy[b] + wy[c]) * (1.0f / 3.0f);
-        float const fcz = (wz[a] + wz[b] + wz[c]) * (1.0f / 3.0f);
-        if (nx * (cam.x - fcx) + ny * (cam.y - fcy) + nz * (cam.z - fcz) <= 0.0f) {
-            continue;
-        }
+        float const*            a = w[t->a];
+        float const*            b = w[t->b];
+        float const*            c = w[t->c];
+        if (!faces_camera(a, b, c, &cam)) continue;
 
         // Gold faces with a loaded plate go in textured; everything else
         // -- the battery panel, lamps and magnet poles, and any face whose
@@ -299,15 +420,18 @@ void ship_submit(void) {
         if (tex != NULL) {
             float const(*uv)[2]         = s_tri_uv[i];
             se_tex_vertex_t const tv[3] = {
-                {wx[a], wy[a], wz[a], uv[0][0], uv[0][1]},
-                {wx[b], wy[b], wz[b], uv[1][0], uv[1][1]},
-                {wx[c], wy[c], wz[c], uv[2][0], uv[2][1]},
+                {a[0], a[1], a[2], uv[0][0], uv[0][1]},
+                {b[0], b[1], b[2], uv[1][0], uv[1][1]},
+                {c[0], c[1], c[2], uv[2][0], uv[2][1]},
             };
             scene_textured_tri(tv, tex, 0);
         } else {
-            scene_tri(wx[a], wy[a], wz[a], wx[b], wy[b], wz[b], wx[c], wy[c], wz[c], SHIP_REGION_COLOR[t->region], 0);
+            scene_tri(a[0], a[1], a[2], b[0], b[1], b[2], c[0], c[1], c[2], SHIP_REGION_COLOR[t->region], 0);
         }
     }
+
+    submit_flame(&pose, &cam, -FLAME_POD_X, s_flame_len[0]);
+    submit_flame(&pose, &cam, FLAME_POD_X, s_flame_len[1]);
 
 #if SHIP_DRAW_OUTLINE
     // The cyan ridge outline, drawn over the faces. scene_render biases
@@ -316,9 +440,9 @@ void ship_submit(void) {
     // far-side ridges stay hidden behind the hull without this needing
     // to cull them.
     for (size_t i = 0; i < SHIP_MODEL_EDGE_COUNT; i++) {
-        uint8_t const a = SHIP_MODEL_EDGES[i][0];
-        uint8_t const b = SHIP_MODEL_EDGES[i][1];
-        scene_line(wx[a], wy[a], wz[a], wx[b], wy[b], wz[b], SHIP_MODEL_OUTLINE_COLOR);
+        float const* a = w[SHIP_MODEL_EDGES[i][0]];
+        float const* b = w[SHIP_MODEL_EDGES[i][1]];
+        scene_line(a[0], a[1], a[2], b[0], b[1], b[2], SHIP_MODEL_OUTLINE_COLOR);
     }
 #endif
 }

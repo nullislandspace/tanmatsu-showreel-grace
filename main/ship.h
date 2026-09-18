@@ -26,8 +26,9 @@ void ship_update(float dt);
 // Submit the mesh for this frame: between scene_begin() and
 // scene_render(). The gold hull goes in as textured triangles (metal
 // plates), the other regions as flat ones, all with back faces culled
-// and all shaded by the engine's light; then the wireframe ridge
-// outline.
+// and all shaded by the engine's light; then the two engine flames,
+// emissive so the light leaves them bright; then (if enabled) the
+// wireframe ridge outline.
 void ship_submit(void);
 
 // The hull's centre in world space: the point the turntable spins

@@ -7,8 +7,9 @@ both. Every texture tiles seamlessly -- all noise is built periodic
 (FFT smoothing wraps around) and every feature is drawn modulo the
 texture size -- because the ship repeats them across large faces.
 
-64x64 each: the engine needs power-of-two edges (it wraps with a mask),
-and at 2 bytes a texel in RGB565 a plate costs 8 KB of internal SRAM.
+Plates are 64x64: the engine needs power-of-two edges (it wraps with a
+mask), and at 2 bytes a texel in RGB565 a plate costs 8 KB of internal
+SRAM. The flame is 64x8 (1 KB).
 
     python3 tools/make_textures.py            # write textures/*.png
     python3 tools/make_textures.py --preview  # also write a 4x contact sheet
@@ -121,11 +122,33 @@ def tread():
     return to_rgb(lum, (122, 124, 129))
 
 
+def flame():
+    """Engine flame, 64x8: u (x) runs along the flame from the nozzle
+    (x = 0) to the tip, v (y) around it. A white-hot core fading through
+    blue to a deep blue tip, with faint lengthwise streaks that fade in
+    after the core so the white stays clean. Drawn emissive, so these
+    are the exact on-screen colours. Not tiled along u: the flame maps it
+    once, stopping short of the right edge so the tip never wraps back
+    to white."""
+    w, h = 64, 8
+    stops = [(0.00, (235, 250, 255)), (0.15, (150, 212, 255)), (0.40, (60, 132, 255)),
+             (0.75, (26, 62, 205)), (1.00, (10, 26, 112))]
+    xs = np.linspace(0.0, 1.0, w)
+    ramp = np.zeros((w, 3))
+    for c in range(3):
+        ramp[:, c] = np.interp(xs, [p for p, _ in stops], [col[c] for _, col in stops])
+    streak = np.array([1.00, 0.90, 1.06, 0.94, 1.00, 0.88, 1.05, 0.95])[:, None, None]
+    fade = np.clip((xs - 0.12) / 0.3, 0.0, 1.0)[None, :, None]   # no streaks in the core
+    img = ramp[None, :, :] * (1.0 + (streak - 1.0) * fade)
+    return np.clip(img, 0, 255).astype(np.uint8)
+
+
 TEXTURES = {
     "plate_riveted.png": riveted,
     "plate_brushed.png": brushed,
     "plate_gunmetal.png": gunmetal,
     "plate_tread.png": tread,
+    "flame.png": flame,
 }
 
 
@@ -140,7 +163,11 @@ def main():
     if "--preview" in sys.argv:
         # Each texture repeated 2x2 (so seams and wrap-around are visible)
         # and scaled 4x, side by side.
-        row = np.concatenate([np.tile(t, (2, 2, 1)) for t in tiles], axis=1)
+        # Each texture 2x2, padded to the tallest so they sit side by side.
+        tall = max(t.shape[0] for t in tiles) * 2
+        blocks = [np.tile(t, (2, 2, 1)) for t in tiles]
+        blocks = [np.pad(b, ((0, tall - b.shape[0]), (0, 4), (0, 0))) for b in blocks]
+        row = np.concatenate(blocks, axis=1)
         prev = Image.fromarray(row, "RGB").resize((row.shape[1] * 4, row.shape[0] * 4), Image.NEAREST)
         path = Path(sys.argv[sys.argv.index("--preview") + 1]) if len(sys.argv) > sys.argv.index("--preview") + 1 \
             else OUT.parent / "build" / "textures_preview.png"

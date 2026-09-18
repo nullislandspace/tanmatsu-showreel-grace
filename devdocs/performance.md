@@ -143,6 +143,31 @@ that divide. Each variant below ran for about two turntable revolutions
   between the per-pixel and span versions is about 3× that. The per-pixel
   run was measured only once.
 
+## 2026-09-18: engine 2.0, outline off, flames, smaller ship
+
+Three changes since the textured-hull numbers above, measured one after
+another (two revolutions each):
+
+| | textured hull | + outline off | + flames, ship at 81% span |
+|---|---:|---:|---:|
+| fps | 29.1–30.4 | 29.7–30.2 | 29.6–31.1 |
+| `rast` mean / max | 20.52 / 30.91 ms | 17.69 / 25.83 ms | **11.43 / 15.87 ms** |
+| textured pass mean | 15.25 ms | 15.42 ms | 9.98 ms (47–74 tris) |
+| least vsync slack | 0.01 ms | 4.39 ms | **14.26 ms** |
+| SRAM free / largest | 131 / 62 KiB | 131 / 62 KiB | 130 / 62 KiB |
+
+- **Outline off:** the 84 edges cost 3–5 ms a frame, about the frame's
+  whole remaining margin with texturing on.
+- **Flames** add 12 emissive textured triangles at most (a few visible at a
+  time). They make the silhouette longer, so the ship shrank from a 2.8 to a
+  2.25 world-unit span to keep every pose on screen. That smaller ship, not
+  the flames, is where the drop in `rast` comes from: about 65% of the
+  previous screen area, so about 65% of the fill.
+- The boot log confirms what was inferred earlier: the 68 KB
+  textured-triangle list is in **PSRAM** (it doesn't fit the 62 KiB largest
+  internal block), and all five textures (four plates and the 1 KB flame)
+  are in **internal SRAM**.
+
 ### Reproducing
 
 ```sh
