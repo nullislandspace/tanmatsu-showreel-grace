@@ -213,7 +213,7 @@ Both have **red** engine flames and fire **red** lasers: beams (unlit `scene_lin
 The spokes reuse `plate_gunmetal.png`.
 
 ## Part C2: the `marauder_pursuit` scene (added, D-25)
-The opening (6 s, first in the playlist): the two marauders in a tight formation (±0.75 units, the right one 0.6 behind) cruising along −z at 14 u/s. Each weaves sideways and up/down, banks into it and rocks its wings, with its own frequencies. The camera rides with the formation 0.75 right of, 0.35 above and 0.9 behind the right ship, looking ~50° across the flight line at the pair. That is more than half the 42° horizontal FOV, so the beams, aimed at the unseen player 60 units ahead, run off the screen edge. The right ship is 400–500 px wide.
+The opening (6 s, first in the playlist): the two marauders in a tight formation (±0.75 units, the right one 0.6 behind) cruising along −z at 14 u/s. Each weaves sideways and up/down, banks into it and rocks its wings, with its own frequencies. The camera rides with the formation 0.90 right of, 0.42 above and 1.08 behind the right ship (pulled back 20% after F-22, so no part of the ship comes nearer than 0.63, clear of the 0.5 near plane), looking ~50° across the flight line at the pair. That is more than half the 42° horizontal FOV, so the beams, aimed at the unseen player 60 units ahead, run off the screen edge. The right ship is up to ~370 px wide.
 
 ## Part C3: MJPEG video export (added, D-26)
 Compile option `SHOWREEL_EXPORT_MJPEG` (CMake `option()`, OFF by default); `make export` builds it in `build-export/`, installs and starts it:
@@ -279,6 +279,7 @@ Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.av
 | 6.7 | Opening scene `marauder_pursuit` (added, D-25) | done | Part C2. First in the playlist. 30 fps, rast 25.6 ms mean / 32.2 max (the close textured ship) |
 | 6.8 | Lasers as beams (added, D-24) | done | Bolts trailed from where the gun had been (behind a fast ship); beams start at the turret by construction |
 | 6.9 | MJPEG video export (added, D-26) | done | Part C3. 26 s of video in 191.6 s; 780 frames after the rounding fix (F-21) |
+| 6.10 | Pursuit: the yellow ship's right wing loses faces (user report) | done | F-22: the near plane at work, not a raster bug. Camera pulled back 20% (D-27); host sweep: nearest point ≥ 0.63 over the whole scene |
 | **7** | **Wrap-up** | | |
 | 7.1 | README (scene system, assets, N key, test automation), final pass on the tracking doc | done | README rewritten (reel, keys, layout, tests, export); `devdocs/performance.md` has the flyby, pursuit, per-asset and export numbers; this document brought up to date |
 | 7.2 | Commit and push graceloader, engine (V2.0), then the showreel with the submodule pointer. **Only when the user asks.** | done | Pushed at each milestone on request: graceloader `9f08def`, template `56b711c`, engine V2.0 `8b5897d`; the showreel up to the export commit and this documentation pass |
@@ -358,6 +359,8 @@ Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.av
   - The first run produced 781 frames instead of 780: the fixed-step show time accumulates to 5.99999 s, not 6.0 s. Fixed with a 1e-6 tolerance in `reel_frame`.
   - Engine: `audio_mixer_shutdown()` after an idle power-down logs `E i2s_common: i2s_channel_disable … not enabled yet` (harmless). Reported to the user, not worked around (D-15).
 
+- **F-22** 2026-09-18, user report: in `marauder_pursuit` the yellow marauder's right wing lost faces, sometimes only partly, as it manoeuvred. Host replica of the scene (camera-space depth of every vertex, 30 fps): the right wingtip and the back of its fin came as near as 0.39 in camera-space z, inside the engine's near plane (`RENDER_NEAR_CLIP_Z` 0.5). In 67 of 180 frames visible faces were clipped, in 45 some were dropped entirely (t ≈ 1.5 s and 3.3–4.4 s). The clipper was working correctly. Side finding (engine, not acted on): `RENDER_NEAR_CLIP_Z` is `#ifndef`-overridable, but `SCENE_DEPTH_SCALE` (32000, `se_scene.c`) is hard-coded for near = 0.5. A smaller near plane would overflow the 16-bit depth (1/z × 32000 > 65535 below z ≈ 0.49) and wrap.
+
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
 - **D-2** User: the player ship is the vendored synthracer ship.
@@ -389,6 +392,8 @@ Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.av
 - **D-24** 2026-09-18, user: lasers are beams, not bolts. A shot lights up from the gun's current position to its target for a fraction of a second (0.12 s); nothing travels. This replaced the bolt model, whose streaks started behind fast ships.
 - **D-25** 2026-09-18, user: new opening scene `marauder_pursuit` (6 s, before the flyby): the marauders fill much of the screen from close behind and right of the right ship; the beams run off the screen edge (camera ~50° off the flight line, beyond half the 42° FOV).
 - **D-26** 2026-09-18, user: MJPEG video export as a compile option. Software JPEG encoder (stb_image_write, vendored) rather than exporting the P4's hardware encoder from graceloader; AVI container.
+
+- **D-27** 2026-09-18, user: fix F-22 in the scene, not the engine. The pursuit camera moved back 20% along its offset, to (−0.90, 0.42, 1.08) from the right ship's slot. The engine's near plane stays at 0.5.
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:

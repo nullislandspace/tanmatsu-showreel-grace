@@ -58,12 +58,14 @@ static weave_t const WEAVE_YELLOW = {0.18f, 0.37f, 2.0f, 0.10f, 0.51f, 2.6f, 0.1
 // looking diagonally across at the pair: ~50 degrees off the flight
 // direction, more than half the horizontal field of view (~42 degrees),
 // so the beams, aimed far ahead, run off the edge of the screen instead
-// of converging in it. From ~1.3 units the
-// right ship is 400-500 px wide (its nose or wingtip sometimes cuts the
-// right edge), the left one ~190 px; nearest point 0.69 units away.
-#define CAM_RIGHT 0.75f  // beyond the right ship, towards screen-right (-x)
-#define CAM_UP    0.35f
-#define CAM_BACK  0.9f
+// of converging in it. From ~1.5 units the right ship is up to ~370 px
+// wide. Keep the camera this far out: the engine's near plane is
+// RENDER_NEAR_CLIP_Z = 0.5 in camera-space depth, and 20% closer the
+// right ship's wingtip crossed it (clipped away at t ~ 1.5 and 3.3-4.4 s).
+// Now its nearest point stays >= 0.63 deep.
+#define CAM_RIGHT 0.90f  // beyond the right ship, towards screen-right (-x)
+#define CAM_UP    0.42f
+#define CAM_BACK  1.08f
 #define CAM_BOB   0.04f  // a slight drift, so the ride does not look locked
 
 static float const TWO_PI = 6.2831853f;
