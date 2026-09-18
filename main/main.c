@@ -29,6 +29,7 @@
 #include "esp_timer.h"
 #include "graceloader.h"
 #include "profile.h"
+#include "screenshot.h"
 #include "ship.h"
 #include "synthengine3d.h"  // the whole engine public API
 
@@ -79,6 +80,7 @@ static char const TAG[] = "showreel";
 
 static bool s_ppa_up        = false;  // compositor came up in on_init
 static bool s_fill_inflight = false;  // this frame's FILL was accepted
+static bool s_shot_pending  = false;  // P pressed; capture at end of frame
 
 // Once-a-second profiling, two lines, in the same shape as Stunt Racer's:
 //
@@ -97,21 +99,31 @@ static bool s_fill_inflight = false;  // this frame's FILL was accepted
 // matters. Sampled once per period rather than tracked, so a transient
 // dip between two samples will not show; this is a trend, not a
 // low-water mark.
-static void log_frame_stats(void) {
-    static int64_t last_us = 0;
-    static int     frames  = 0;
+static int64_t s_stats_last_us = 0;  // start of the current period; 0 = restart
+static int     s_stats_frames  = 0;
 
+// Throw away the period in progress and start a fresh one at the next
+// log_frame_stats(). For stalls the numbers should not average in: a
+// screenshot blocks the loop for about a second, which would otherwise
+// show up as one period of ~15 fps with a huge "rest".
+static void stats_restart(void) {
+    s_stats_last_us = 0;
+    s_stats_frames  = 0;
+}
+
+static void log_frame_stats(void) {
     int64_t const now = esp_timer_get_time();
-    if (last_us == 0) {
-        // First frame after the splash: start the clock at the END of it
-        // and drop its phase times, so the first period covers exactly
-        // the frames it counts -- not on_init, se_splash() or half a
-        // frame of phases the clock never saw start.
-        last_us = now;
+    if (s_stats_last_us == 0) {
+        // First frame after the splash (or after stats_restart()): start
+        // the clock at the END of it and drop its phase times, so the
+        // first period covers exactly the frames it counts -- not
+        // on_init, se_splash(), a screenshot's stall or half a frame of
+        // phases the clock never saw start.
+        s_stats_last_us = now;
         prof_reset();
         return;
     }
-    frames++;
+    s_stats_frames++;
     prof_frame();
 
     // The engine's present runs after on_render returns, so what it
@@ -121,7 +133,7 @@ static void log_frame_stats(void) {
     se_present_stats(&blit_us, &vsync_us);
     prof_add(PROF_BLIT, blit_us);
     prof_add(PROF_VSYNC, vsync_us);
-    int64_t const elapsed = now - last_us;
+    int64_t const elapsed = now - s_stats_last_us;
     if (elapsed < 1000000) return;
 
     // Last frame's rasterize split. Instantaneous, not averaged over the
@@ -131,20 +143,21 @@ static void log_frame_stats(void) {
     scene_raster_stats(&tri_n, &line_n, &tri_us, &line_us);
     scene_textured_stats(&ttri_n, &ttri_us);
 
-    float const frame_ms = (float)elapsed / (1000.0f * (float)frames);
+    float const frame_ms = (float)elapsed / (1000.0f * (float)s_stats_frames);
     char        phases[160];
     if (prof_flush(phases, sizeof(phases), frame_ms)) {
         ESP_LOGI(TAG, "  %.2f ms/frame:  %s", (double)frame_ms, phases);
     }
 
-    ESP_LOGI(
-        TAG, "%.1f fps  %s  tris %d (%lld us)  ttris %d (%lld us)  lines %d (%lld us)  sram free %u KiB largest %u KiB",
-        (double)frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), tri_n, (long long)tri_us, ttri_n,
-        (long long)ttri_us, line_n, (long long)line_us, (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
-        (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
+    ESP_LOGI(TAG,
+             "%.1f fps  %s  tris %d (%lld us)  ttris %d (%lld us)  lines %d (%lld us)  sram free %u KiB largest %u KiB",
+             (double)s_stats_frames * 1000000.0 / (double)elapsed, se_renderer_name(RENDER_MODE), tri_n,
+             (long long)tri_us, ttri_n, (long long)ttri_us, line_n, (long long)line_us,
+             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL) / 1024),
+             (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 1024));
 
-    frames  = 0;
-    last_us = now;
+    s_stats_frames  = 0;
+    s_stats_last_us = now;
 }
 
 // Once, after the engine has booted display + audio + scene, before the
@@ -205,6 +218,18 @@ static void on_init(void* user) {
     });
 }
 
+// Input events the engine did not consume itself (F1 and the volume
+// keys never get here). P latches a screenshot; it is taken at the end
+// of the frame, not here, so the file holds a finished image. Scancodes
+// arrive for release too, with BSP_INPUT_SCANCODE_RELEASE_MODIFIER set,
+// so the exact match below fires on the press only.
+static void on_input(bsp_input_event_t const* ev, void* user) {
+    (void)user;
+    if (ev->type == INPUT_EVENT_TYPE_SCANCODE && ev->args_scancode.scancode == BSP_INPUT_SCANCODE_P) {
+        s_shot_pending = true;
+    }
+}
+
 // Per-frame logic. dt is seconds since the previous frame, already
 // clamped by the engine to SE_FRAME_DT_MAX.
 static void on_update(float dt, void* user) {
@@ -255,7 +280,6 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
 // fill still in flight would land on top of the hull.
 static void on_render(pax_buf_t* fb, void* user) {
     (void)user;
-    (void)fb;
 
     prof_begin(PROF_WAIT);
     if (s_fill_inflight) {
@@ -266,6 +290,16 @@ static void on_render(pax_buf_t* fb, void* user) {
     prof_begin(PROF_RASTER);
     scene_rasterize(RENDER_MODE);
     prof_end(PROF_RASTER);
+
+    // Last thing in the frame, so the capture is of the finished image.
+    // It blocks for as long as the SD write takes (about a second); the
+    // engine's dt clamp absorbs that, and the stats period is restarted
+    // so the stall does not land in the performance numbers.
+    if (s_shot_pending) {
+        s_shot_pending = false;
+        screenshot_capture(fb);
+        stats_restart();
+    }
 
     log_frame_stats();
 }
@@ -287,6 +321,7 @@ void app_main(void) {
     };
     static se_app_callbacks_t const cb = {
         .on_init     = on_init,
+        .on_input    = on_input,
         .on_update   = on_update,  // required
         .on_backdrop = on_backdrop,
         .on_render   = on_render,

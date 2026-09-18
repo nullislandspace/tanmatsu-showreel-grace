@@ -12,6 +12,7 @@ set(APP_SOURCES
     main/main.c
     main/ship.c
     main/profile.c
+    main/screenshot.c
     main/crt0.c
 )
 

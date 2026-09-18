@@ -24,6 +24,9 @@ need Python, and `make install` uploads them next to `app.so`.
 Frame timing is logged to the console once a second; `devdocs/performance.md` holds the
 reference numbers.
 
+Press **P** to save a screenshot to `/sd/showreel/shotNNN.png` (uncompressed PNG, about
+1.1 MB; the capture stalls the frame for about a second).
+
 The engine lives in [`synthengine3D/`](synthengine3D/) as a git submodule, so a fresh
 checkout needs:
 
