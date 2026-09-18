@@ -12,3 +12,4 @@ esp-idf-tools
 esp-idf
 results/
 __pycache__/
+build-export/

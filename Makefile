@@ -40,7 +40,7 @@ all: build
 build:
 	@echo "=== Building app.so ==="
 	mkdir -p $(BUILD)
-	cd $(BUILD) && cmake .. && make
+	cd $(BUILD) && cmake $(CMAKE_FLAGS) .. && make
 	@echo "=== Build complete: $(BUILD)/app.so ==="
 
 # Badgelink
@@ -137,6 +137,18 @@ mode_badgelink:
 # stay on the SD card; TESTFLAGS=--fetch downloads them (slow).
 TEST ?= perf scene=turntable secs=20
 TESTFLAGS ?=
+
+# MJPEG video export (main/export_mjpeg.h). Builds the export variant in
+# its own build directory, installs it in place of the live reel and
+# starts it: it renders every playlist scene once at a fixed 30 fps into
+# /sd/showreel/showreel.avi (logging its progress on the console), then
+# returns to the launcher. `make install` puts the live reel back.
+# Fetching the file over BadgeLink is slow (~18 KB/s, i.e. many minutes
+# for a video of tens of MB); taking the SD card out is quicker:
+#   badgelink/tools/badgelink.sh $(BADGELINK_CONN) fs download /sd/showreel/showreel.avi showreel.avi
+.PHONY: export
+export:
+	$(MAKE) build install run BUILD=build-export CMAKE_FLAGS=-DSHOWREEL_EXPORT_MJPEG=ON
 
 .PHONY: testrun cycle testrefs testcompare recover
 testrun:

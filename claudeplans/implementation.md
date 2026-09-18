@@ -333,6 +333,9 @@ The spokes reuse `plate_gunmetal.png`.
   | exit | 30.0 | 7.4 / 15.9 ms |
   | reverse | 29.9 | 7.9 / 14.4 ms |
   The chase dips to 23–25 fps for ~3 s (t 6–8.5), when the textured ring and spokes fill the screen close up: fill-bound. Caps far from full (≤ 157 tris, ≤ 533 ttris, a few lines). SRAM 152/62 KiB. Performance is to be decided later (D-7).
+- **F-21** 2026-09-18, MJPEG export (`make export`): 26.0 s of video in 191.6 s. JPEG encode ~200 ms/frame at quality 85, write ~23 ms/frame, 12–30 KB/frame, in `/sd/showreel/showreel.avi`.
+  - The first run produced 781 frames instead of 780: the fixed-step show time accumulates to 5.99999 s, not 6.0 s. Fixed with a 1e-6 tolerance in `reel_frame`.
+  - Engine: `audio_mixer_shutdown()` after an idle power-down logs `E i2s_common: i2s_channel_disable … not enabled yet` (harmless). Reported to the user, not worked around (D-15).
 
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
@@ -364,6 +367,7 @@ The spokes reuse `plate_gunmetal.png`.
 - **D-23** 2026-09-18, user: flyby v1 accepted ("looks quite OK"). Next: a separate opening scene. The camera is close behind the marauders and right of the right marauder's centreline; they fly in formation with slight wing wiggles, firing at the player (out of frame). It establishes that the marauders won't give up.
 - **D-24** 2026-09-18, user: lasers are beams, not bolts. A shot lights up from the gun's current position to its target for a fraction of a second (0.12 s); nothing travels. This replaced the bolt model, whose streaks started behind fast ships.
 - **D-25** 2026-09-18, user: new opening scene `marauder_pursuit` (6 s, before the flyby): the marauders fill much of the screen from close behind and right of the right ship; the beams run off the screen edge (camera ~50° off the flight line, beyond half the 42° FOV).
+- **D-26** 2026-09-18, user: MJPEG video export as a compile option. Software JPEG encoder (stb_image_write, vendored) rather than exporting the P4's hardware encoder from graceloader; AVI container.
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:

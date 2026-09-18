@@ -23,6 +23,12 @@ void reel_submit(void);
 
 // Skip to the next scene in the playlist.
 void reel_next(void);
+// Start the playlist over from its first scene, at the current show
+// time, and reset the cycle count.
+void reel_restart(void);
+// How many times the playlist has wrapped round to its first scene since
+// startup or reel_restart().
+int  reel_cycles(void);
 // Play the scene called `name` (any scene, played or not) from t = 0
 // and stay on it (no advancing) until reel_release(). For tests.
 // Returns false if there is no such scene.

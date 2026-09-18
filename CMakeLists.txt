@@ -53,6 +53,15 @@ endif()
 string(TIMESTAMP APP_BUILD_TIME "%Y-%m-%dT%H:%M:%SZ" UTC)
 configure_file(main/app_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/app_version.h @ONLY)
 
+# MJPEG video export (main/export_mjpeg.h): renders the playlist once at a
+# fixed 30 fps into /sd/showreel/showreel.avi instead of playing it live.
+# Off in normal builds; `make export` builds with it in build-export/.
+option(SHOWREEL_EXPORT_MJPEG "Build the MJPEG video export instead of the live reel" OFF)
+if(SHOWREEL_EXPORT_MJPEG)
+    list(APPEND APP_SOURCES main/export_mjpeg.c)
+    add_compile_definitions(SHOWREEL_EXPORT_MJPEG=1)
+endif()
+
 # Include directories — add paths to your headers here
 set(APP_INCLUDES
     main

@@ -25,6 +25,9 @@
 
 #include <stdbool.h>
 #include "devtest.h"
+#ifdef SHOWREEL_EXPORT_MJPEG
+#include "export_mjpeg.h"
+#endif
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_timer.h"
@@ -172,6 +175,12 @@ static void on_init(void* user) {
     // launcher by itself.
     devtest_start(stats_restart);
 
+#ifdef SHOWREEL_EXPORT_MJPEG
+    // Export build: render the playlist once at a fixed 30 fps into an
+    // MJPEG AVI instead of playing it live (export_mjpeg.h).
+    export_begin();
+#endif
+
     // Output-neutral scene passes (both default OFF; see se_scene.h).
     // Frustum cull is a near-pure win. depth_order is an overdraw-
     // dependent trade-off: one hull filling the screen is light
@@ -214,6 +223,9 @@ static void on_update(float dt, void* user) {
     (void)dt;
     showtime_frame();
     devtest_update();  // may steer the show clock (shot tests)
+#ifdef SHOWREEL_EXPORT_MJPEG
+    export_update();  // puts the clock and the reel at the start, once
+#endif
     reel_frame();
 }
 
@@ -286,6 +298,9 @@ static void on_render(pax_buf_t* fb, void* user) {
     }
 
     devtest_after_render(fb, rast_us);
+#ifdef SHOWREEL_EXPORT_MJPEG
+    export_frame(fb);
+#endif
     log_frame_stats();
 }
 

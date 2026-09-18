@@ -32,6 +32,7 @@ static scene_def_t const* s_cur;
 static size_t             s_play_idx;
 static double             s_start;  // show time at the scene's t = 0
 static bool               s_hold;
+static int                s_cycles;
 
 static void enter(scene_def_t const* sc) {
     s_cur   = sc;
@@ -59,12 +60,27 @@ void reel_shutdown(void) {
 void reel_next(void) {
     s_hold     = false;
     s_play_idx = (s_play_idx + 1) % PLAY_N;
+    if (s_play_idx == 0) s_cycles++;
     enter(PLAYLIST[s_play_idx]);
+}
+
+void reel_restart(void) {
+    s_hold     = false;
+    s_cycles   = 0;
+    s_play_idx = 0;
+    enter(PLAYLIST[0]);
+}
+
+int reel_cycles(void) {
+    return s_cycles;
 }
 
 void reel_frame(void) {
     if (s_hold || s_cur->duration <= 0.0f) return;
-    if (reel_scene_time() >= (double)s_cur->duration) reel_next();
+    // A hair of tolerance: in fixed-step mode (the video export) show
+    // time is a running sum of 1/fps steps, which lands a rounding error
+    // short of the duration and would otherwise render one extra frame.
+    if (reel_scene_time() >= (double)s_cur->duration - 1e-6) reel_next();
 }
 
 void reel_submit(void) {
