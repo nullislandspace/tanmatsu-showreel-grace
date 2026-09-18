@@ -266,6 +266,23 @@ meshcheck:
 	$(HOSTCC) -O1 -Wall -Wextra -DMESH_HOST -Imain -Itools $(MESHCHECK_SRCS) -lm -o $(BUILD)/host/meshcheck
 	$(BUILD)/host/meshcheck
 
+# Host-side check of every scene (tools/scenecheck.c): runs the real scene
+# and asset code at 30 fps against a stand-in engine (tools/host/) and
+# checks the near plane, list caps, clearances and framing. No badge
+# needed. SCENES="name ..." checks only those; SCENECHECK_FLAGS=-v lists
+# every clipped frame. mesh_render.c is built on its own, with its
+# mesh_submit renamed, so the checker can wrap it.
+SCENECHECK_CFLAGS := -O2 -Wall -Wextra -DMESH_HOST -Itools/host -Itools -Imain -Isynthengine3D/include
+SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c main/mesh.c main/camera.c \
+                     $(wildcard main/assets/*.c) $(wildcard main/scenes/*.c)
+
+.PHONY: scenecheck
+scenecheck:
+	mkdir -p $(BUILD)/host
+	$(HOSTCC) $(SCENECHECK_CFLAGS) -Dmesh_submit=mesh_submit_real -c main/mesh_render.c -o $(BUILD)/host/mesh_render_real.o
+	$(HOSTCC) $(SCENECHECK_CFLAGS) $(SCENECHECK_SRCS) $(BUILD)/host/mesh_render_real.o -lm -o $(BUILD)/host/scenecheck
+	$(BUILD)/host/scenecheck $(SCENECHECK_FLAGS) $(SCENES)
+
 .PHONY: format
 format:
 	find main/ -iname '*.h' -o -iname '*.c' -o -iname '*.cpp' | xargs clang-format -i

@@ -80,6 +80,7 @@ direction.
 
 ```sh
 make meshcheck                                        # host: math + every mesh generator (closed, outward-facing)
+make scenecheck [SCENES="name ..."]                   # host: every scene at 30 fps -- near plane, list caps, clearances, framing
 make testrun TEST="perf scene=spacestation_flyby"     # device: per-second and per-shot timings
 make testrun TEST="shots scene=turntable ms=0,2500"   # device: render exact instants, report frame hashes
 make cycle TEST="..."                                 # build, install, run, then the test

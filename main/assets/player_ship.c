@@ -133,6 +133,7 @@ static void plate_uv(ship_model_tri_t const* t, vec3_t n, float uv[3][2]) {
 
 static void build_mesh(void) {
     mesh_init(&s_mesh);
+    s_mesh.name = "player_ship";
     for (size_t i = 0; i < SHIP_MODEL_VERT_COUNT; i++) {
         ship_model_vert_t const* v = &SHIP_MODEL_VERTS[i];
         mesh_vert(&s_mesh, normalise(v->x, v->y, v->z));

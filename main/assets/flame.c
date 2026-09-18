@@ -4,6 +4,7 @@
 
 #include "assets/flame.h"
 #include <stdbool.h>
+#include <stddef.h>
 #include "assets/texcache.h"
 #include "camera.h"
 #include "synthengine3d.h"

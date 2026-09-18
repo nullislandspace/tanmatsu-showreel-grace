@@ -42,6 +42,7 @@ static void finsec(float out[MESH_LOFT_MAX_PTS][2], float x, float y0, float h, 
 
 void marauder_build_mesh(mesh_t* m) {
     mesh_init(m);
+    m->name = "marauder";
     float sec[5][MESH_LOFT_MAX_PTS][2];
 
     // Fuselage: from a near-point nose to a blunt tail, bulging at the

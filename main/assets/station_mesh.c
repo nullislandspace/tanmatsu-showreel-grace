@@ -17,6 +17,7 @@
 
 void station_build_mesh(mesh_t* m) {
     mesh_init(m);
+    m->name = "station";
 
     // Hub, capped both ends.
     mesh_cylinder(m, STATION_HUB_R, -STATION_HUB_HALF_Z, STATION_HUB_HALF_Z, HUB_SIDES, true, true, STATION_MAT_HULL,

@@ -34,6 +34,7 @@ typedef struct {
     mesh_tri_t* t;
     int         tn, tcap;
     bool        failed;  // an allocation failed; the mesh is incomplete
+    char const* name;    // for diagnostics (logs, make scenecheck); may be NULL
 } mesh_t;
 
 // Start an empty mesh. Storage grows as parts are added (PSRAM on the
