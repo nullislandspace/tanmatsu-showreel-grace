@@ -1,4 +1,6 @@
-# Implementation plan: scene system + "spacestation_flyby"
+# Implementation plan: the SynthEngine showreel
+
+Started as "scene system + spacestation_flyby" (Parts A–C3, steps 0–7, all done). Part C4 and steps 8–12 cover the full eleven-scene reel the user defined afterwards (D-28).
 
 Living document: design, step-by-step status, findings and decisions.
 Updated whenever a step starts or finishes, something is measured, or
@@ -223,6 +225,120 @@ Compile option `SHOWREEL_EXPORT_MJPEG` (CMake `option()`, OFF by default); `make
 
 Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.avi -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart showreel.mp4`.
 
+## Part C4: the full reel, eleven scenes (added, D-28)
+
+The user defined the complete sequence on 2026-09-18. Two of the scenes already exist (`marauder_pursuit` and `spacestation_flyby`); nine are new. The reel tells one story: the hero lands on an industrial planet, the marauders come for it, it escapes into space, past the station, and warps out. In another system it ambushes its pursuers from behind an asteroid, destroys one and drives off the other.
+
+### C4.1 Running order
+
+Durations are first estimates, to be tuned per scene; total ≈ 1:50.
+
+| # | Scene (file / `name`) | Status | Content | ~s |
+|---|---|---|---|---|
+| 1 | `title` | new | 3D title "Borderworlds:" / "Superior", drifting in, canted into the screen | 7 |
+| 2 | `planet_landing` | new | The hero ship lands on a planet; industrial buildings behind it, flare stacks burning | 12 |
+| 3 | `marauder_approach` | new | Medium close-up: the marauders fly towards that planet | 6 |
+| 4 | `pad_strafe` | new | Medium close-up: the marauders fire on the landed hero ship | 7 |
+| 5 | `emergency_takeoff` | new | The hero ship takes off in a hurry and climbs between the incoming marauders, firing blue lasers | 8 |
+| 6 | `marauder_pursuit` | exists | The marauders close up, firing red lasers (Part C2) | 6 |
+| 7 | `spacestation_flyby` | exists | The station pass (Part C) | 20 |
+| 8 | `warp_out` | new | The hero ship warps away; the marauders fly on for a few seconds, then warp too | 8 |
+| 9 | `asteroid_ambush` | new | Another system: the hero comes out of warp and hides behind an asteroid; the marauders arrive and pass it; the hero comes out behind them, gives chase and fires blue lasers | 16 |
+| 10 | `marauder_downfall` | new | Close-up of the marauders under blue fire; the yellow one explodes; a couple of seconds later the green one warps away | 9 |
+| 11 | `hero_rolls` | new | Close-up of the hero ship flying fast, a couple of barrel rolls, then straight on | 8 |
+
+The playlist becomes all eleven in this order. The reel still loops, and `N` still skips. The turntable and the asset viewer stay unused dev scenes.
+
+### C4.2 Scene designs
+
+Each scene is a pure function of scene time (B0). New scenes follow the lessons so far: `make scenecheck` (C4.4) keeps the near-plane margin on ships (F-22), and so do the cap and clearance checks; shots are framed on the host replica before the device is touched.
+
+**1 · `title`.** Starfield only (black backdrop).
+- Two lines of extruded block letters: "Borderworlds:" and "Superior" (C4.3, `title_text`). "Superior" is set in larger letters so that both lines are the same length (D-29).
+- Each line lies in a plane yawed into the screen: its left end near the left screen edge (~5%), its right end further away, ending at ~70% of the screen width. Both lines start and end at the same screen x. The yaw and depth are solved on the host so the projected ends land there.
+- Line 1 drifts down from above the top of the screen; line 2 drifts up from below. Both ease out (smoothstep) into place around 3 s, hold, and a slow camera dolly keeps the hold alive. Staggered by ~0.5 s so they don't mirror each other exactly.
+- Textures (D-29): "Borderworlds:" wears the hero ship's plates: `plate_brushed` on the letter faces, `plate_riveted` on the sides. "Superior" wears the green marauder's livery: `marauder_green` on the faces, `plate_gunmetal` on the sides. The light comes from the upper left, so the extrusion reads as 3D.
+
+**2 · `planet_landing`.** On the planet's surface.
+- Set (shared with scenes 4 and 5, C4.3 `planet_base`): a landing pad; behind it industrial buildings (halls, tanks, pipe racks, chimneys) and two or three flare stacks with flames on top, flickering; a distant ridge line. The sky and the ground out to the horizon are solid colours painted by the PPA (C4.3 `backdrop`, D-29); only the ground around the pad (the apron) is textured geometry.
+- The hero ship descends from above/behind the camera, decelerates on a path, levels out, the flames throttle down, it touches down on the pad and the engines die.
+- Shots: a wide establishing shot of the base with the ship coming in; a lower, closer angle for the touchdown.
+
+**3 · `marauder_approach`.** In space, above the planet.
+- The planet as a large textured sphere in the background (C4.3 `planet`), the marauders in formation in the foreground, heading towards it.
+- Medium close-up: both ships well inside the frame (unlike the pursuit's fill-the-screen framing), the camera tracking alongside and slightly ahead.
+
+**4 · `pad_strafe`.** Back at the base.
+- The marauders make a low strafing pass over the pad, firing red beams at the landed hero ship. The beams hit the ground around it: impact bursts (C4.3 `impact`). The ship is not hit.
+- Medium close-up on the marauders as they come in, then the pass over the pad.
+
+**5 · `emergency_takeoff`.** At the base.
+- The hero ship lifts off hard: vertical first, flames at full throttle, nose pitching up into a steep climb.
+- The marauders come round for a second pass, head-on. The hero ship climbs between them, the two passing either side, and fires blue beams as they cross (C4.3: player guns, blue laser style).
+- Camera: low on the ground looking up for the lift-off, then a shot that holds the moment the three ships cross.
+
+**6 · `marauder_pursuit`**, **7 · `spacestation_flyby`**: as built.
+
+**8 · `warp_out`.** Space; the station small in the background.
+- The hero ship flies away from the camera and warps out (C4.3 `warp`): a stretch along its flight line, then a flash, and it is gone.
+- The marauders fly on for ~3 s, then warp after it, one after the other.
+- Camera: behind the marauders, looking past them at the hero ship.
+
+**9 · `asteroid_ambush`.** Another solar system: a different starfield (other seed and band), a different sun position and brightness, a banded gas giant in the distance (`planet` with another texture), a large asteroid (C4.3 `asteroid`) and a few small ones.
+- The hero ship warps in (the warp effect in reverse), turns and slows into cover behind the asteroid.
+- A few seconds later the marauders warp in, fly on and pass the asteroid.
+- The hero ship comes out from behind it, falls in behind them and opens fire with blue beams.
+- Shots: wide on the asteroid for the arrival and hiding; the marauders passing close to the camera; the hero emerging behind them.
+
+**10 · `marauder_downfall`.** Same system.
+- Framing like the pursuit (close, beside the formation), with blue beams arriving from behind and out of frame; some miss, some hit the yellow ship (impact bursts on its hull).
+- The yellow marauder explodes (C4.3 `explosion`): the ship breaks into its parts, which fly apart tumbling, a fireball swells and dies, and sparks scatter.
+- The green one flies on for a couple of seconds, then warps away.
+
+**11 · `hero_rolls`.** Close-up of the hero ship flying fast.
+- Space dust (C4.3 `space_dust`) streams past, so the speed shows; stars alone can't show speed.
+- It flies straight, then does two barrel rolls, then flies straight on.
+- Camera: close beside and slightly ahead, riding along. The ship's nearest point stays clear of the near plane.
+
+### C4.3 New assets and shared pieces
+
+Each goes in its own generator, reusable by any scene (D-6). Meshes live in engine-free `*_mesh.c` files, so `make meshcheck` covers them (D-20).
+- **`title_text`**: 3D block letters for the glyphs needed (B d e i l o p r S s u w and ":"). **Proposal P-1:** each glyph is a set of straight, chamfered strokes on a small grid. Each stroke extrudes into a closed prism, so there is no polygon triangulation and holes (o, e, d, p, B) come for free, with a chunky retro look. `title_text_build(mesh, "Borderworlds:", height, depth)` returns the line's width for layout. Two materials per letter: face (front and back) and sides, so each line can take its own texture pair (D-29). Accepted (D-29).
+- **`planet_base`**: the base set of scenes 2, 4 and 5. It includes the landing pad, industrial buildings (boxes and cylinders), flare stacks and a textured apron of ground around the pad. The apron is subdivided so near clipping and culling work on small pieces. Beyond it, the ground is the PPA-painted backdrop. It also includes a ridge line on the horizon, and a pad position/orientation for choreography.
+- **Flare stack flames:** the existing `flame` asset, pointing up, with an orange style.
+- **`planet`**: a UV sphere with an equirectangular texture. The earthy one for scene 3; a banded gas giant for scene 9. Kept to ≤ 24×12 segments, because the textured list holds 1024 triangles (F-3). To evaluate in the same step: a large, far planet barely changes on screen, so it could instead be drawn once into a PPA layer and blitted with a colour key under the geometry each frame (`se_ppa_blend_key`), in the same spirit as the PPA backdrop. Measure both and decide.
+- **`asteroid`**: an icosphere (subdivided twice), with its vertices displaced along the radius by value noise, and a rock texture. Seeded, so small ones differ from the big one. It stays closed, so meshcheck applies.
+- **`warp`**: the warp-out and warp-in effect, a pure function of time since the warp. **Proposal P-2:** over ~0.4 s the ship stretches along its flight line (×6) and thins (×0.3) while speeding away. At the end a white flash (a burst of short radial `scene_line`s and points, ~0.25 s) marks where it vanished. Warp-in runs the same thing backwards. Accepted (D-29). The stretch needs a non-uniform scale in `xform_t`, and a general 3×3 is enough (`mesh_submit` only transforms points; faces and lighting use world vertices).
+- **`explosion`**: **Proposal P-3:** the marauder mesh records its parts (fuselage, wings, fins, nacelles, guns: 10 closed parts), and an exploding ship submits each part with its own velocity and tumble. A fireball goes with it: a flame-textured icosphere, emissive, swelling and shrinking with flicker. Sparks are points and short lines. No transparency needed. Accepted (D-29).
+- **`impact`**: a laser hit, i.e. a burst of short orange-white lines and points for ~0.2 s, on the ground or a hull.
+- **Player guns and blue lasers**: `player_ship_gun(x, side)` (muzzle positions on the vendored model, to be chosen) and `LASER_STYLE_PLAYER` (blue, e.g. `0xFF40A0FF`).
+- **`space_dust`**: points in a box around the camera, wrapped around it (position modulo the box). This gives parallax and a sense of speed. Optionally drawn as short lines along the velocity, as speed streaks.
+- **`backdrop`: PPA-painted sky and ground (D-29).** Ported from Stunt Racer's `main/backdrop.c` (`../tanmatsu-stuntracer-grace`). It is app code, not engine, and uses only public engine calls (`render_camera`, `render_project`, `se_ppa_fill`, `se_ppa_wait_job`, `direct_565_vrun`).
+  - Two far probe points at eye height give the horizon (the ground plane's vanishing line) as a screen line.
+  - The PPA fills everything above the lowest point of that line with the sky colour and everything below with the ground colour, while the geometry is prepared.
+  - Before any framebuffer write, the CPU waits for the fills, then paints only the ground wedge a rolled horizon cuts out, which is empty when the camera is level. Stunt Racer's finding is kept: no CPU framebuffer work while a fill is in flight, because cache lines straddle the seam.
+  - A scene declares its backdrop in `scene_def_t`: black (the current single fill, for the space scenes) or sky/ground colours (scenes 2, 4, 5). It replaces the fixed `BACKDROP_ARGB` and the single `JOB_CLEAR` fill in `main.c`.
+  - Buildings and the ship stand on geometry drawn over it, so the backdrop needs no depth.
+  - Accepted instead of P-4's horizon haze band; no sky dome.
+- **Shared formation code:** the pursuit's formation, weave and bank maths moves from `marauder_pursuit.c` into `scenes/formation.c`, for scenes 3, 8, 10 and the pursuit itself.
+- **New textures** (`make_textures.py`, own RNG so the existing PNGs stay byte-identical): `ground` (the apron), `pad` (concrete with markings), `industrial_wall`, `rock`, `planet_terran` (128×64), `planet_gas` (128×64).
+
+### C4.4 Tooling: `make scenecheck` (host)
+
+The lesson of F-22: the marauder wing crossed the near plane, which only showed on the device. A host build of the real scene code, linked against a stub engine, checks every scene at 30 fps before any device run:
+- **Near plane:** the minimum camera-space depth of each object submitted through `mesh_submit`, with the frames where it drops below the near plane plus a margin (0.6). Some objects are allowed to cross on purpose (the spokes in the flyby chase, debris flying at the lens); scenes list those.
+- **Caps:** triangle, textured triangle, line and point counts per frame, against the engine caps (F-3), with the peak per shot.
+- **Clearances:** the closest approach between named objects (ships, station, asteroid, ground), so nothing flies through anything.
+- **Framing:** optionally, the projected screen bounds of named objects per shot (the title layout of scene 1 uses this).
+
+This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textured_tri`, `scene_line`, `scene_point`, camera, light, textures), in `tools/host/`. That stub records; it does not render.
+
+### C4.5 Risks and open points
+- **Performance:** the planet scenes draw buildings and a textured apron; the rest of the ground and the sky are PPA fills (D-29), which cost the CPU almost nothing. The flyby's chase shot already shows that a screen full of close textured surfaces drops to 23–25 fps (F-20). Measured per scene (`perf`), decided later (D-7).
+- **Textured cap:** the planet sphere, the base set and two marauders together can approach 1024 textured triangles. `scenecheck` shows the peaks. Raising `SE_SCENE_TEXTURED_TRI_CAP` would be an engine change, so ask first (D-15).
+- **Engine:** nothing in this plan needs a new engine feature. If something does turn out to need one (for example a coloured light for the second solar system; `se_light_t` has brightness only), stop and ask (D-15).
+- **Confirmed by the user (D-29):** P-1, P-2 and P-3 as proposed; P-4 replaced by the PPA backdrop; "Superior" larger, so both title lines are the same length.
+
 ## Part D: step-by-step plan with status tracking
 
 **Status values:** `todo` · `in progress` · `done` · `blocked (why)` · `skipped (why)`. Each step's Notes column records its result, with links to Findings (F-n) and Decisions (D-n).
@@ -283,6 +399,42 @@ Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.av
 | **7** | **Wrap-up** | | |
 | 7.1 | README (scene system, assets, N key, test automation), final pass on the tracking doc | done | README rewritten (reel, keys, layout, tests, export); `devdocs/performance.md` has the flyby, pursuit, per-asset and export numbers; this document brought up to date |
 | 7.2 | Commit and push graceloader, engine (V2.0), then the showreel with the submodule pointer. **Only when the user asks.** | done | Pushed at each milestone on request: graceloader `9f08def`, template `56b711c`, engine V2.0 `8b5897d`; the showreel up to the export commit and this documentation pass |
+| **8** | **Full reel: shared infrastructure (C4.3, C4.4)** | | |
+| 8.1 | User confirms P-1…P-4 and the title-line layout | done | D-29: P-1…P-3 accepted; sky/ground as PPA fills (from Stunt Racer) instead of P-4; "Superior" larger so both lines are the same length; title textures from the hero ship / green marauder |
+| 8.2 | `make scenecheck`: host stand-in engine (`tools/host/`), scenes and assets compiled on the host; near-plane margin, caps, clearances, framing. Run on the two existing scenes (it must reproduce F-22 on the old pursuit camera) | todo | |
+| 8.3 | `backdrop.c`: PPA sky/ground port from Stunt Racer; per-scene backdrop in `scene_def_t` (black or sky/ground); `on_backdrop`/`on_render` rewired; space scenes unchanged (hash-compare shots before/after) | todo | |
+| 8.4 | `xform_t` with a general 3×3 (non-uniform scale); meshcheck math tests | todo | |
+| 8.5 | Mesh parts: builders record the triangle range of each closed part; `mesh_submit_part()` | todo | |
+| 8.6 | `scenes/formation.c`: the pursuit's formation, weave and bank maths, shared; the pursuit renders unchanged (hash-compare shots before/after) | todo | |
+| 8.7 | Player guns (`player_ship_gun`) and `LASER_STYLE_PLAYER` (blue) | todo | |
+| **9** | **Full reel: new assets** | | |
+| 9.1 | Textures: `ground`, `pad`, `industrial_wall`, `rock`, `planet_terran`, `planet_gas`; contact sheet; `metadata.json` | todo | |
+| 9.2 | `title_text` (stroke font, extruded, face/side materials; meshcheck) | todo | |
+| 9.3 | `planet_base` set: pad, apron, buildings, flare stacks (orange flames), ridge (meshcheck) | todo | |
+| 9.4 | `planet` (UV sphere, two textures; meshcheck); measure against a PPA colour-keyed layer and decide | todo | |
+| 9.5 | `asteroid` (displaced icosphere, seeded; meshcheck) | todo | |
+| 9.6 | `warp` (out / in; stretch, flash) | todo | |
+| 9.7 | `explosion` (parts, fireball, sparks) and `impact` | todo | |
+| 9.8 | `space_dust` | todo | |
+| 9.9 | Asset viewer: shots for the new assets; perf per asset (as F-19) | todo | |
+| **10** | **Full reel: new scenes** (each: host replica/scenecheck clean → device shots → review → user's look) | | |
+| 10.1 | Scene 1 `title`: layout solved on the host (left end ~5%, right end ~70%), drift-in, hold | todo | |
+| 10.2 | Scene 2 `planet_landing` | todo | |
+| 10.3 | Scene 3 `marauder_approach` | todo | |
+| 10.4 | Scene 4 `pad_strafe` | todo | |
+| 10.5 | Scene 5 `emergency_takeoff` | todo | |
+| 10.6 | Scene 8 `warp_out` | todo | |
+| 10.7 | Scene 9 `asteroid_ambush` | todo | |
+| 10.8 | Scene 10 `marauder_downfall` | todo | |
+| 10.9 | Scene 11 `hero_rolls` | todo | |
+| **11** | **Full reel: integration** | | |
+| 11.1 | Playlist = all eleven in order (C4.1); scene-to-scene continuity (liveries, directions, where the sun is); the user watches the whole reel on the badge | todo | |
+| 11.2 | `perf` per scene; the slow shots listed in `devdocs/performance.md`; performance decisions with the user (D-7) | todo | |
+| 11.3 | Reference hashes for key frames of every scene (`testrefs`) | todo | |
+| 11.4 | MJPEG export of the full reel; the user checks the video | todo | |
+| **12** | **Full reel: wrap-up** | | |
+| 12.1 | README, performance notes, this document | todo | |
+| 12.2 | Commit and push, only when the user asks | todo | |
 
 **Standing rule (D-15):** if a step hits an engine problem, set that step to `blocked (engine: …)`, log a finding, and ask the user before doing anything else. The same applies to graceloader and launcher problems.
 
@@ -394,6 +546,12 @@ Output: `/sd/showreel/showreel.avi`. Convert with ffmpeg: `ffmpeg -i showreel.av
 - **D-26** 2026-09-18, user: MJPEG video export as a compile option. Software JPEG encoder (stb_image_write, vendored) rather than exporting the P4's hardware encoder from graceloader; AVI container.
 
 - **D-27** 2026-09-18, user: fix F-22 in the scene, not the engine. The pursuit camera moved back 20% along its offset, to (−0.90, 0.42, 1.08) from the right ship's slot. The engine's near plane stays at 0.5.
+- **D-28** 2026-09-18, user: the full reel is eleven scenes (Part C4): title "Borderworlds:" / "Superior" (3D, drifting in, canted into the screen: left end near the left edge, right end further away at ~70% of the width); hero lands at an industrial planet base with flare stacks; marauders approach the planet; marauders fire on the landed hero; emergency take-off between the incoming marauders firing blue lasers; the existing pursuit; the existing station flyby; hero warps out, the marauders follow a few seconds later; another system: the hero warps in, hides behind an asteroid, the marauders pass, the hero pursues and fires; close-up of the marauders under blue fire, yellow explodes, green warps away; close-up of the hero flying fast with barrel rolls. Claude's proposals P-1…P-4 (C4.3) went to the user for an OK (step 8.1; answered in D-29).
+- **D-29** 2026-09-18, user:
+  - The stroke-built block letters (P-1), the stretch-and-flash warp (P-2) and the parts-fireball-sparks explosion (P-3) are accepted.
+  - Title textures: "Borderworlds:" in the hero ship's textures, "Superior" in the green marauder's.
+  - "Superior" is set larger so both lines are the same length.
+  - Solid sky is fine, and large areas should be painted with the PPA, as Stunt Racer does: sky and ground fills with a CPU wedge for a rolled horizon (C4.3 `backdrop`).
 
 ## Verification (summary)
 Automated wherever possible, via `make cycle`:
