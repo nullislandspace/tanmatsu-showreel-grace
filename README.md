@@ -13,19 +13,21 @@ The playlist (`main/reel.c`) plays in a loop, about 72 s. It will grow to eleven
 (`claudeplans/implementation.md`, Part C4); these seven exist:
 
 1. **`title`** (12.5 s) -- "Borderworlds:" / "Superior" in 3D block letters, drifting in
-   from above and below, canted into the screen, on sky blue.
+   from above and below, canted into the screen, on the planet's sky; then the hero
+   flies past behind the lettering.
 2. **`planet_landing`** (12 s) -- the player's ship comes down at an industrial planet
    base (halls, tanks, burning flare stacks) and settles on the pad.
 3. **`marauder_approach`** (6 s) -- the two marauders fly towards the planet.
 4. **`pad_strafe`** (7 s) -- they make a low pass over the base, their lasers tearing
    up the ground round the landed ship.
 5. **`emergency_takeoff`** (8 s) -- the ship lifts off and climbs between the
-   marauders as they come round again, firing its blue lasers.
+   marauders as they come round again; both sides turn to aim and fire, and miss.
 6. **`marauder_pursuit`** (6 s) -- two marauders in formation, seen from close behind
-   the right one, weaving and firing their lasers at the player's ship (out of frame).
+   the right one, weaving and firing their lasers straight ahead at the player's ship (out of frame).
 7. **`spacestation_flyby`** (20 s) -- the player's ship threads the gap between two
    spokes of a turning 2001-style wheel station; the marauders take the long way round
-   the ring, catch up and open fire. Four shots: establish, chase (through the gap),
+   the ring, close onto its tail and open fire -- beams straight off their noses, near
+   misses and three hits that burn on its hull. Four shots: establish, chase (through the gap),
    exit (looking back at the wheel), reverse chase.
 
 Three more scenes are compiled in but not played: `turntable` (the player's ship on a

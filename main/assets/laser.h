@@ -20,7 +20,7 @@
 
 typedef struct {
     float    duration;  // seconds a shot stays lit
-    float    range;     // longest beam, world units (it stops at the target if nearer)
+    float    range;     // longest beam, world units: far enough to leave any shot's frame
     uint32_t argb;
 } laser_style_t;
 
@@ -38,3 +38,8 @@ static inline bool laser_lit(float t, float t_fire, laser_style_t const* style) 
 // `muzzle` (the gun's position NOW) towards `target`, at most
 // style->range long.
 void laser_submit_beam(vec3_t muzzle, vec3_t target, float t, float t_fire, laser_style_t const* style);
+
+// A shot fired straight ahead, that hits nothing: from `muzzle` along
+// `dir` (the gun's forward, normalised) the full style->range, so it
+// runs out of the frame instead of stopping in mid-air.
+void laser_submit_ray(vec3_t muzzle, vec3_t dir, float t, float t_fire, laser_style_t const* style);

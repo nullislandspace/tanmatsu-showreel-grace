@@ -5,6 +5,14 @@
 //  between two spokes of a turning 2001-style station; the marauders take
 //  the longer way round the ring, catch up and open fire (and miss).
 //
+//  Past the wheel the marauders leave their paths and close onto the
+//  player's tail -- one high on its left, one low on its right -- and
+//  turn their noses on it. They only fire straight ahead, so every beam
+//  runs along its ship's body; each is aimed just past the player on the
+//  shooter's own side and runs on out of the frame -- except three that
+//  hit: the shooter's nose swings onto the player for them, the beam ends
+//  on its hull, a small burst goes off there and the ship shudders.
+//
 //  Everything is a pure function of scene time t (scene.h). The ships
 //  follow Catmull-Rom paths (xform.h) sampled on one shared time grid,
 //  face along their velocity and bank into their turns. The station's
@@ -17,6 +25,7 @@
 // =====================================================================
 
 #include <math.h>
+#include "assets/explosion.h"
 #include "assets/laser.h"
 #include "assets/marauder.h"
 #include "assets/player_ship.h"
@@ -78,10 +87,62 @@ static path_t const YELLOW_PATH = {YELLOW_PTS, PATH_N, 0.0f, PATH_DT};
 #define ROLL_START    15.0f
 #define ROLL_END      16.4f
 
-// --- Lasers -------------------------------------------------------------
-#define FIRE_START    12.0f  // first shot
+// --- The attack ---------------------------------------------------------
+// Each marauder blends from its path onto a track that follows the
+// player's own path LAG seconds behind, offset in the player's heading
+// frame (no roll). Once there, it turns its nose on its aim point: the
+// player plus a miss on the marauder's own side, swinging slowly round.
+#define LAG           0.5f   // ~6.6 units behind at the player's speed
 #define FIRE_INTERVAL 0.35f  // per marauder, guns alternating
-#define FIRE_MISS     1.6f   // miss distance, world units
+#define MISS_MIN      1.15f  // miss distance range, world units: clear of
+#define MISS_MAX      1.5f   // the hull (half-span 0.5) and the flames
+#define HIT_SWING     0.35f  // seconds the nose takes to swing onto the player for a hit
+#define HIT_BURST     0.12f  // the hit's fireball, in ship spans: a burn on the hull, not the ship going up
+#define HIT_SHUDDER   0.5f   // seconds the player shakes after a hit
+
+typedef struct {
+    path_t const* path;
+    float         right, up;     // the track's offset in the player's heading frame
+    float         join0, join1;  // path -> track blend
+    float         aim0, aim1;    // nose: velocity -> aim point; fires from aim1
+    float         phase;         // the miss's swing
+} raider_t;
+
+static raider_t const GREEN  = {&GREEN_PATH, -0.9f, 1.2f, 11.0f, 15.0f, 11.6f, 12.4f, 0.0f};
+static raider_t const YELLOW = {&YELLOW_PATH, 1.6f, -0.8f, 11.0f, 15.8f, 13.0f, 13.8f, 2.1f};
+
+// The shots that hit: shooter and shot number (fired at aim1 + k *
+// FIRE_INTERVAL). All in the reverse shot, one before the barrel roll
+// and two after it.
+typedef struct {
+    raider_t const* raider;
+    int             k;
+} hit_t;
+
+static hit_t const HITS[] = {{&GREEN, 6}, {&YELLOW, 9}, {&GREEN, 15}};  // 14.5, 16.95, 17.65 s
+#define HIT_N ((int)(sizeof(HITS) / sizeof(HITS[0])))
+
+static float hit_time(hit_t const* h) {
+    return h->raider->aim1 + (float)h->k * FIRE_INTERVAL;
+}
+
+static bool is_hit(raider_t const* r, int k) {
+    for (int i = 0; i < HIT_N; i++) {
+        if (HITS[i].raider == r && HITS[i].k == k) return true;
+    }
+    return false;
+}
+
+// 1 while marauder `r` is lined up for one of its hits, easing to 0
+// HIT_SWING either side: how much of its miss it drops.
+static float hit_weight(raider_t const* r, float t) {
+    float w = 0.0f;
+    for (int i = 0; i < HIT_N; i++) {
+        if (HITS[i].raider != r) continue;
+        w = fmaxf(w, 1.0f - smoothstep(0.0f, HIT_SWING, fabsf(t - hit_time(&HITS[i]))));
+    }
+    return w;
+}
 
 // --- Shots --------------------------------------------------------------
 typedef enum {
@@ -131,19 +192,84 @@ static xform_t ship_pose(path_t const* path, float t, float span, float extra_ro
     };
 }
 
+// A hit rocks the ship: a fast, dying wobble in roll.
+static float hit_shudder(float t) {
+    float roll = 0.0f;
+    for (int i = 0; i < HIT_N; i++) {
+        float const dt = t - hit_time(&HITS[i]);
+        if (dt >= 0.0f && dt < HIT_SHUDDER) roll += 0.3f * sinf(45.0f * dt) * (1.0f - dt / HIT_SHUDDER);
+    }
+    return roll;
+}
+
 static float player_roll(float t) {
-    return 6.2831853f * smoothstep(ROLL_START, ROLL_END, t);
+    return 6.2831853f * smoothstep(ROLL_START, ROLL_END, t) + hit_shudder(t);
 }
 
 static xform_t player_pose(float t) {
     return ship_pose(&PLAYER_PATH, t, PLAYER_SPAN, player_roll(t));
 }
 
+// --- The marauders ------------------------------------------------------------
+
+// The player's heading frame at t: right and up, level (no bank, no roll).
+static void heading_frame(float t, vec3_t* right, vec3_t* up) {
+    vec3_t const f = v3_norm(path_vel(&PLAYER_PATH, t));
+    *right         = v3_norm(v3_cross(v3(0.0f, 1.0f, 0.0f), f));
+    *up            = v3_cross(f, *right);
+}
+
+static vec3_t raider_pos(raider_t const* r, float t) {
+    vec3_t const on_path = path_pos(r->path, t);
+    float const  w       = smoothstep(r->join0, r->join1, t);
+    if (w <= 0.0f) return on_path;
+    vec3_t right, up;
+    heading_frame(t - LAG, &right, &up);
+    vec3_t const track =
+        v3_add(path_pos(&PLAYER_PATH, t - LAG), v3_add(v3_scale(right, r->right), v3_scale(up, r->up)));
+    return v3_lerp(on_path, track, w);
+}
+
+static vec3_t raider_vel(raider_t const* r, float t) {
+    float const h = 0.02f;
+    return v3_scale(v3_sub(raider_pos(r, t + h), raider_pos(r, t - h)), 0.5f / h);
+}
+
+// Where the marauder points its guns at t: past the player, on the side
+// the marauder flies on (so it hardly has to crab), the miss swinging
+// +-70 degrees about that side and in and out between MISS_MIN and MISS_MAX.
+static vec3_t raider_aim(raider_t const* r, float t) {
+    vec3_t const player = path_pos(&PLAYER_PATH, t);
+    vec3_t const los    = v3_norm(v3_sub(player, raider_pos(r, t)));
+    vec3_t       right, up;
+    heading_frame(t, &right, &up);
+    vec3_t const off  = v3_add(v3_scale(right, r->right), v3_scale(up, r->up));
+    vec3_t const side = v3_norm(v3_sub(off, v3_scale(los, v3_dot(off, los))));
+    mat3_t const turn = mat3_axis_angle(los, 1.2f * sinf(1.3f * t + r->phase));
+    float const  miss = (MISS_MIN + (MISS_MAX - MISS_MIN) * (0.5f + 0.5f * sinf(2.3f * t + 2.0f * r->phase))) *
+                       (1.0f - hit_weight(r, t));
+    return v3_add(player, v3_scale(mat3_apply(&turn, side), miss));
+}
+
+// Pose: facing along the velocity, turning onto the aim point from aim0
+// to aim1; banking into the turn as ship_pose does.
+static xform_t raider_pose(raider_t const* r, float t) {
+    vec3_t const pos = raider_pos(r, t);
+    vec3_t const v   = raider_vel(r, t);
+    float const  a   = smoothstep(r->aim0, r->aim1, t);
+    vec3_t const f   = a > 0.0f ? v3_norm(v3_lerp(v3_norm(v), v3_norm(v3_sub(raider_aim(r, t), pos)), a)) : v3_norm(v);
+    float const  h   = 0.05f;
+    vec3_t const acc = v3_scale(v3_sub(raider_vel(r, t + h), raider_vel(r, t - h)), 0.5f / h);
+    vec3_t const right = v3_norm(v3_cross(v3(0.0f, 1.0f, 0.0f), f));
+    float const  bank  = clampf(-BANK_PER_ACC * v3_dot(acc, right), -BANK_MAX, BANK_MAX);
+    return (xform_t){.r = mat3_from_fwd_up(f, v3(0.0f, 1.0f, 0.0f), bank), .pos = pos, .scale = MARAUDER_SPAN};
+}
+
 // --- Camera per shot --------------------------------------------------------
 
 // The three ships' centroid at t.
 static vec3_t ships_centroid(float t) {
-    vec3_t const sum = v3_add(v3_add(path_pos(&PLAYER_PATH, t), path_pos(&GREEN_PATH, t)), path_pos(&YELLOW_PATH, t));
+    vec3_t const sum = v3_add(v3_add(path_pos(&PLAYER_PATH, t), raider_pos(&GREEN, t)), raider_pos(&YELLOW, t));
     return v3_scale(sum, 1.0f / 3.0f);
 }
 
@@ -187,7 +313,7 @@ static void set_camera(shot_t shot, float t) {
             // Ahead of the player, off to its right, looking back at it and
             // at the pursuit behind it.
             vec3_t const eye    = v3_add(path_pos(&PLAYER_PATH, t + 0.28f), v3(1.3f, 0.7f, 0.0f));
-            vec3_t const mid    = v3_lerp(path_pos(&GREEN_PATH, t), path_pos(&YELLOW_PATH, t), 0.5f);
+            vec3_t const mid    = v3_lerp(raider_pos(&GREEN, t), raider_pos(&YELLOW, t), 0.5f);
             vec3_t const target = v3_lerp(player, mid, 0.3f);
             camera_look_at(eye, target, 0.0f);
             break;
@@ -197,19 +323,55 @@ static void set_camera(shot_t shot, float t) {
 
 // --- Lasers -----------------------------------------------------------------
 
-// The shot lit at t, if any, from the marauder on `path`: a shot every
-// FIRE_INTERVAL from FIRE_START, guns alternating, each a beam from the
-// gun's current position at the player, offset by a pseudo-random miss.
-static void submit_lasers(path_t const* path, float t, unsigned seed) {
-    if (t < FIRE_START) return;
-    int const   k  = (int)floorf((t - FIRE_START) / FIRE_INTERVAL);
-    float const tf = FIRE_START + (float)k * FIRE_INTERVAL;
+// Where shot k of marauder `r`, lined up for a hit, meets the player's
+// hull at t: along the gun's line, at its closest approach to the
+// player's centre, backed off to the hull's surface.
+static vec3_t hit_point(raider_t const* r, float t, int k) {
+    xform_t const pose  = raider_pose(r, t);
+    vec3_t const  fwd   = mat3_apply(&pose.r, v3(0.0f, 0.0f, 1.0f));
+    vec3_t const  gun   = marauder_gun(&pose, k & 1);
+    float const   along = v3_dot(v3_sub(path_pos(&PLAYER_PATH, t), gun), fwd);
+    return v3_add(gun, v3_scale(fwd, along - 0.2f * PLAYER_SPAN));
+}
+
+// The shot lit at t, if any, from marauder `r`: a shot every
+// FIRE_INTERVAL once its nose is on the aim point (aim1), guns
+// alternating; each fires straight ahead along the ship's body.
+static void submit_lasers(raider_t const* r, float t) {
+    if (t < r->aim1) return;
+    int const   k  = (int)floorf((t - r->aim1) / FIRE_INTERVAL);
+    float const tf = r->aim1 + (float)k * FIRE_INTERVAL;
     if (!laser_lit(t, tf, &LASER_STYLE_MARAUDER)) return;
-    xform_t const pose   = ship_pose(path, t, MARAUDER_SPAN, 0.0f);
-    vec3_t const  gun    = marauder_gun(&pose, k & 1);
-    vec3_t const  miss   = v3((hash01(k, seed) - 0.5f) * 2.0f, (hash01(k, seed + 1u) - 0.5f) * 2.0f, 0.0f);
-    vec3_t const  target = v3_add(path_pos(&PLAYER_PATH, t), v3_scale(v3_norm(miss), FIRE_MISS));
-    laser_submit_beam(gun, target, t, tf, &LASER_STYLE_MARAUDER);
+    xform_t const pose = raider_pose(r, t);
+    vec3_t const  fwd  = mat3_apply(&pose.r, v3(0.0f, 0.0f, 1.0f));
+    vec3_t const  gun  = marauder_gun(&pose, k & 1);
+    if (is_hit(r, k)) {
+        // Straight ahead onto the player: the beam stops at its hull.
+        laser_submit_beam(gun, hit_point(r, t, k), t, tf, &LASER_STYLE_MARAUDER);
+    } else {
+        laser_submit_ray(gun, fwd, t, tf, &LASER_STYLE_MARAUDER);
+    }
+}
+
+// The hits' bursts, riding on the player where the beam struck: the spot
+// is kept in the ship's own frame, so the burst rolls and shudders with it.
+static void submit_hits(float t) {
+    for (int i = 0; i < HIT_N; i++) {
+        float const th = hit_time(&HITS[i]);
+        if (t < th || t > th + EXPLOSION_SECS) continue;
+        xform_t const then    = player_pose(th);
+        vec3_t const  rel     = v3_sub(hit_point(HITS[i].raider, th, HITS[i].k), then.pos);
+        vec3_t        body    = v3(0.0f, 0.0f, 0.0f);  // rel in the ship's axes (the pose is orthonormal)
+        body.x                = v3_dot(rel, mat3_apply(&then.r, v3(1.0f, 0.0f, 0.0f)));
+        body.y                = v3_dot(rel, mat3_apply(&then.r, v3(0.0f, 1.0f, 0.0f)));
+        body.z                = v3_dot(rel, mat3_apply(&then.r, v3(0.0f, 0.0f, 1.0f)));
+        xform_t const now     = player_pose(t);
+        vec3_t const  at      = v3_add(now.pos, mat3_apply(&now.r, body));
+        xform_t const shooter = raider_pose(HITS[i].raider, th);
+        vec3_t const  normal  = v3_scale(mat3_apply(&shooter.r, v3(0.0f, 0.0f, 1.0f)), -1.0f);
+        impact_submit(at, normal, 1.2f, t, th, 500u + (unsigned)i);
+        explosion_submit(at, v3(0.0f, 0.0f, 0.0f), HIT_BURST * PLAYER_SPAN, t, th, 600u + (unsigned)i);
+    }
 }
 
 // --- Scene ------------------------------------------------------------------
@@ -217,6 +379,7 @@ static void submit_lasers(path_t const* path, float t, unsigned seed) {
 static void flyby_init(char const* asset_dir) {
     player_ship_init(asset_dir);
     marauder_init();
+    explosion_init();
     station_init();
     starfield_init();
 }
@@ -224,6 +387,7 @@ static void flyby_init(char const* asset_dir) {
 static void flyby_shutdown(void) {
     player_ship_shutdown();
     marauder_shutdown();
+    explosion_shutdown();
     station_shutdown();
 }
 
@@ -249,13 +413,14 @@ static void flyby_submit(double td) {
     xform_t const player = player_pose(t);
     player_ship_submit(&player, 1.0f, td);
 
-    xform_t const green  = ship_pose(&GREEN_PATH, t, MARAUDER_SPAN, 0.0f);
-    xform_t const yellow = ship_pose(&YELLOW_PATH, t, MARAUDER_SPAN, 0.0f);
+    xform_t const green  = raider_pose(&GREEN, t);
+    xform_t const yellow = raider_pose(&YELLOW, t);
     marauder_submit(&green, MARAUDER_GREEN, 1.0f, td, 1u);
     marauder_submit(&yellow, MARAUDER_YELLOW, 1.0f, td, 2u);
 
-    submit_lasers(&GREEN_PATH, t, 101u);
-    submit_lasers(&YELLOW_PATH, t, 202u);
+    submit_lasers(&GREEN, t);
+    submit_lasers(&YELLOW, t);
+    submit_hits(t);
 }
 
 static char const* flyby_shot(double t) {

@@ -2,8 +2,8 @@
 //  Showreel scene  --  marauder_pursuit
 // ---------------------------------------------------------------------
 //  The opening: the two marauders in formation, seen from close behind
-//  and just right of the right one, weaving a little and firing ahead at
-//  a target out of frame -- the player's ship. It is there to establish
+//  and just right of the right one, weaving a little and firing straight
+//  ahead at a target out of frame -- the player's ship. It is there to establish
 //  that they are not going to give up before spacestation_flyby shows
 //  the chase itself.
 //
@@ -47,9 +47,7 @@ static slot_t const SLOT_YELLOW = {
 };
 
 // --- Guns ------------------------------------------------------------------
-#define FIRE_INTERVAL 0.2f   // per ship, guns alternating
-#define TARGET_AHEAD  60.0f  // the (unseen) player, this far ahead
-#define TARGET_MISS   1.5f   // spread of the aim around it
+#define FIRE_INTERVAL 0.2f  // per ship, guns alternating
 
 // --- Camera -----------------------------------------------------------------
 // Close behind and right of the right marauder, a little above it, and
@@ -67,21 +65,17 @@ static slot_t const SLOT_YELLOW = {
 #define CAM_BOB   0.04f  // a slight drift, so the ride does not look locked
 
 // The shot lit at t from one ship, if any: a shot every FIRE_INTERVAL
-// (guns alternating), each a beam from the gun's current position at the
-// unseen target ahead, with a small pseudo-random miss. `offset` staggers
-// the two ships' salvos.
-static void submit_lasers(slot_t const* slot, float t, float offset, unsigned seed) {
+// (guns alternating), each a beam straight along the ship's nose -- the
+// weave swings it about -- out of the frame. `offset` staggers the two
+// ships' salvos.
+static void submit_lasers(slot_t const* slot, float t, float offset) {
     if (t < offset) return;
     int const   k  = (int)floorf((t - offset) / FIRE_INTERVAL);
     float const tf = offset + (float)k * FIRE_INTERVAL;
     if (!laser_lit(t, tf, &LASER_STYLE_MARAUDER)) return;
     xform_t const pose = formation_pose(&FORMATION, slot, t, MARAUDER_SPAN);
-    vec3_t const  gun  = marauder_gun(&pose, k & 1);
-    vec3_t const  miss =
-        v3((hash01(k, seed) - 0.5f) * 2.0f * TARGET_MISS, (hash01(k, seed + 1u) - 0.5f) * 2.0f * TARGET_MISS, 0.0f);
-    vec3_t const target = v3_add(
-        v3_add(formation_centre(&FORMATION, t), formation_to_world(&FORMATION, v3(0.0f, 0.3f, TARGET_AHEAD))), miss);
-    laser_submit_beam(gun, target, t, tf, &LASER_STYLE_MARAUDER);
+    vec3_t const  fwd  = mat3_apply(&pose.r, v3(0.0f, 0.0f, 1.0f));
+    laser_submit_ray(marauder_gun(&pose, k & 1), fwd, t, tf, &LASER_STYLE_MARAUDER);
 }
 
 static void pursuit_init(char const* asset_dir) {
@@ -120,8 +114,8 @@ static void pursuit_submit(double td) {
     marauder_submit(&green, MARAUDER_GREEN, 1.0f, td, 1u);
     marauder_submit(&yellow, MARAUDER_YELLOW, 1.0f, td, 2u);
 
-    submit_lasers(&SLOT_GREEN, t, 0.4f, 11u);
-    submit_lasers(&SLOT_YELLOW, t, 0.5f, 22u);
+    submit_lasers(&SLOT_GREEN, t, 0.4f);
+    submit_lasers(&SLOT_YELLOW, t, 0.5f);
 }
 
 scene_def_t const SCENE_MARAUDER_PURSUIT = {

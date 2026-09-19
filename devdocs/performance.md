@@ -238,11 +238,13 @@ the shot, not one-second samples). Engine V2.0 with near-plane clipping and
 | establish | 30.0 | 4.3 / 5.0 ms | 143 / 532 |
 | chase | **27.6** | **20.7 / 48.3 ms** | 102 / 330 |
 | exit | 30.0 | 7.4 / 15.9 ms | 157 / 415 |
-| reverse | 29.9 | 7.9 / 14.4 ms | 157 / 533 |
+| reverse | 30.0 | 10.6 / 18.2 ms | 298 / 514 |
 
 The chase dips to **23–25 fps for about 3 s** (t ≈ 6–8.5 s), when the camera is
 right at the wheel and the textured ring and spokes fill the screen: fill-bound.
 No list comes near its cap (flat 4096, textured 1024, points 1024).
+
+2026-09-19, with the aimed fire and the three hits (D-36): the reverse shot holds 30 fps. The hits' fireballs push flat triangles to ~300 and lines to ~17 per frame.
 
 **`marauder_pursuit`** (6 s): 30.0 fps, `rast` 25.6 ms mean / 32.2 ms max. The
 right marauder fills half the screen, so this scene has the least headroom.
@@ -264,7 +266,7 @@ count. Only what the PPA paints is free.
 **Planet scenes** (`perf scene=...`, 2026-09-19): planet_landing establish 24 / touchdown
 20 fps; marauder_approach 24 fps (the planet's textured disc, rast 37 ms); pad_strafe chase
 26 / **ground 10.6 fps** (rast 88 ms: halls, tanks and pad fill ~80% of the view);
-emergency_takeoff lift-off 19 / crossing 30 fps. The title holds 30 fps. What decides the
+emergency_takeoff lift-off 19 / crossing 30 fps. The title holds 30 fps, the hero's flypast included (rast ≤ 20.4 ms, ≤ 572 textured tris). What decides the
 frame rate is how much textured surface fills the frame, not the triangle count. Looking up
 at a ship against the PPA sky is cheap; looking along the ground at the works is not.
 Deferred to step 11.2 (F-26, F-28, D-33).

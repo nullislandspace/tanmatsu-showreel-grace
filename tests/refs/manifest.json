@@ -1,59 +1,59 @@
 {
  "marauder_pursuit_000000.png": {
-  "captured": "20260918T202227Z",
+  "captured": "20260919T003719Z",
   "engine": "2.0",
   "fnv": "c447978a",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-pursuit-formation.c-F-25"
+  "git": "20c8dbb5b5-dirty",
+  "reason": "pursuit-beams-along-nose"
  },
  "marauder_pursuit_001500.png": {
-  "captured": "20260918T202227Z",
+  "captured": "20260919T003719Z",
   "engine": "2.0",
-  "fnv": "a4b81f99",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-pursuit-formation.c-F-25"
+  "fnv": "4b618f69",
+  "git": "20c8dbb5b5-dirty",
+  "reason": "pursuit-beams-along-nose"
  },
  "marauder_pursuit_003870.png": {
-  "captured": "20260918T202227Z",
+  "captured": "20260919T003719Z",
   "engine": "2.0",
-  "fnv": "cb751c11",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-pursuit-formation.c-F-25"
+  "fnv": "a1e89ea5",
+  "git": "20c8dbb5b5-dirty",
+  "reason": "pursuit-beams-along-nose"
  },
  "marauder_pursuit_005500.png": {
-  "captured": "20260918T202227Z",
+  "captured": "20260919T003719Z",
   "engine": "2.0",
-  "fnv": "3c472f6e",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-pursuit-formation.c-F-25"
+  "fnv": "43e0df82",
+  "git": "20c8dbb5b5-dirty",
+  "reason": "pursuit-beams-along-nose"
  },
  "spacestation_flyby_002000.png": {
-  "captured": "20260918T200014Z",
+  "captured": "20260919T002927Z",
   "engine": "2.0",
   "fnv": "dcc3fa0c",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-flyby"
+  "git": "20c8dbb5b5-dirty",
+  "reason": "flyby-aimed-lasers-hits"
  },
  "spacestation_flyby_008300.png": {
-  "captured": "20260918T200014Z",
+  "captured": "20260919T002927Z",
   "engine": "2.0",
   "fnv": "4519f6d2",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-flyby"
+  "git": "20c8dbb5b5-dirty",
+  "reason": "flyby-aimed-lasers-hits"
  },
  "spacestation_flyby_011000.png": {
-  "captured": "20260918T200014Z",
+  "captured": "20260919T002927Z",
   "engine": "2.0",
-  "fnv": "6c378c9c",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-flyby"
+  "fnv": "0819b86d",
+  "git": "20c8dbb5b5-dirty",
+  "reason": "flyby-aimed-lasers-hits"
  },
  "spacestation_flyby_017000.png": {
-  "captured": "20260918T200014Z",
+  "captured": "20260919T002927Z",
   "engine": "2.0",
-  "fnv": "bde1b839",
-  "git": "630c60e03f-dirty",
-  "reason": "baseline-flyby"
+  "fnv": "ddfbd56c",
+  "git": "20c8dbb5b5-dirty",
+  "reason": "flyby-aimed-lasers-hits"
  },
  "turntable_000000.png": {
   "captured": "20260918T162005Z",
