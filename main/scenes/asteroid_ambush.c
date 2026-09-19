@@ -11,13 +11,21 @@
 //  line along -z, 12 units to its right (+x); the hero hides 9.5 units
 //  to its left.
 //
-//  Three shots: out on the hiding side of the rock (the arrival and the
+//  Every beam runs along the hero's nose. Most pass close by a marauder
+//  -- the hero's aim circles each in turn -- and three strike one,
+//  sparking off its hull; a beam never runs on through a ship or a rock.
+//
+//  Four shots: out on the hiding side of the rock (the arrival and the
 //  hiding); low by the rock on the marauders' line as they drop in and
-//  roar past; riding behind the hero as it comes out after them.
+//  roar past; riding behind the hero as it comes out after them; ahead
+//  of the pair looking back, as it opens fire -- its beams come at the
+//  lens and leave the frame past it (a beam fired away from a camera
+//  behind the guns would shrink to a point in mid-screen).
 // =====================================================================
 
 #include <math.h>
 #include "assets/asteroid.h"
+#include "assets/explosion.h"
 #include "assets/laser.h"
 #include "assets/marauder.h"
 #include "assets/player_ship.h"
@@ -40,14 +48,24 @@
 #define FIRE0         12.8f  // the hero's guns, alternating
 #define FIRE1         15.6f
 #define FIRE_INTERVAL 0.15f
-#define AIM_TURN      0.4f  // seconds to bring the nose on / off the aim
+#define AIM_TURN      0.4f   // seconds to bring the nose on / off the aim
+#define T_TO_YELLOW0  14.1f  // the aim moves from the green ship to the yellow one
+#define T_TO_YELLOW1  14.45f
 
 #define SHOT_PASS   4.6f  // before the marauders drop in, so their flashes are in it
 #define SHOT_AMBUSH 9.0f
+#define SHOT_FIRE   12.4f  // ahead of the pair, looking back, for the guns
 
 // --- Ships ------------------------------------------------------------------
 #define HERO_SPAN     1.0f
 #define MARAUDER_SPAN 0.9f
+
+// The hero's aim circles its target this far off the line of fire, clear
+// of the hull (half-span 0.45) ...
+#define MISS       1.15f
+#define MISS_TURNS 0.55f  // ... going round this many times a second
+// ... except for the hits, where it closes onto the ship for a moment.
+#define HIT_CLOSE  0.08f  // seconds: the aim's dip onto the hull, around the lit beam
 
 // The hero's arrival: out of warp at 2x path speed, braking to rest at
 // the last point (path time 0..4 mapped onto T_HERO_IN..T_HIDE).
@@ -68,9 +86,18 @@ static slot_t const SLOT_YELLOW = {
     .offset = {0.9f, -0.1f, -0.8f},
     .weave  = {-0.18f, 0.35f, 2.4f, 0.12f, 0.47f, 1.9f, 0.1f, 0.85f, 0.3f},
 };
+// The shots that strike (fired at FIRE0 + k * FIRE_INTERVAL): the green
+// ship first, then twice the yellow one.
+typedef struct {
+    int  k;
+    bool yellow;
+} hit_t;
+static hit_t const HITS[] = {{5, false}, {13, true}, {17, true}};
+#define HIT_N ((int)(sizeof(HITS) / sizeof(HITS[0])))
+
 // Where the hero sits on their tail, in the formation's frame.
 #define TAIL_SLOT \
-    { 0.2f, 1.0f, -7.0f }
+    { 0.2f, 0.9f, -5.5f }
 // On the way out it swings wide of the rock: this far at the half-way point.
 #define EMERGE_SWING \
     { -2.0f, 0.0f, -9.0f }
@@ -87,7 +114,6 @@ typedef struct {
 static rock_t const ROCKS[] = {
     {0, {0.0f, 0.0f, 0.0f}, ROCK_RADIUS, {0.3f, 1.0f, 0.2f}, 0.05f},
     {1, {-18.0f, 6.0f, -25.0f}, 1.2f, {1.0f, 0.4f, 0.1f}, 0.3f},
-    {2, {22.0f, -5.0f, 18.0f}, 0.8f, {0.2f, 0.3f, 1.0f}, 0.45f},
     {3, {-6.0f, -9.0f, 30.0f}, 1.5f, {0.6f, 1.0f, 0.5f}, 0.2f},
     {1, {14.0f, 8.0f, -40.0f}, 1.0f, {0.1f, 1.0f, 0.9f}, 0.35f},
 };
@@ -138,14 +164,42 @@ static vec3_t hero_heading(float t) {
     return v3_norm(v3_lerp(rest, v3_norm(v), k));
 }
 
-// The hero's aim while firing: a little above the pair, sweeping across
-// them -- every beam a near miss (scene 10 has the hits).
+static xform_t green_base(float t) {
+    return formation_pose(&FORMATION, &SLOT_GREEN, t, MARAUDER_SPAN);
+}
+
+static xform_t yellow_base(float t) {
+    return formation_pose(&FORMATION, &SLOT_YELLOW, t, MARAUDER_SPAN);
+}
+
+static float hit_time(int i) {
+    return FIRE0 + (float)HITS[i].k * FIRE_INTERVAL;
+}
+
+// How far the aim has closed onto the hull for a hit: 1 while the hit's
+// beam is lit, falling off before the shot before and after the one
+// after (FIRE_INTERVAL away) -- those still pass clear.
+static float hit_weight(float t) {
+    float w = 0.0f;
+    for (int i = 0; i < HIT_N; i++) {
+        float const d = (t - hit_time(i) - 0.5f * LASER_STYLE_PLAYER.duration) / HIT_CLOSE;
+        w             = fmaxf(w, expf(-d * d));
+    }
+    return w;
+}
+
+// The hero's aim while firing: circling the green ship, then the yellow
+// one, MISS off the line of fire -- close misses -- and onto the hull
+// for the hits.
 static vec3_t hero_aim(float t) {
-    vec3_t const g   = formation_pose(&FORMATION, &SLOT_GREEN, t, MARAUDER_SPAN).pos;
-    vec3_t const y   = formation_pose(&FORMATION, &SLOT_YELLOW, t, MARAUDER_SPAN).pos;
-    vec3_t const mid = v3_scale(v3_add(g, y), 0.5f);
-    float const  s   = sinf(6.2831853f * 0.7f * (t - FIRE0));
-    return v3_add(mid, formation_to_world(&FORMATION, v3(1.4f * s, 1.2f, 0.0f)));
+    float const  k      = smoothstep(T_TO_YELLOW0, T_TO_YELLOW1, t);
+    vec3_t const target = v3_lerp(green_base(t).pos, yellow_base(t).pos, k);
+    vec3_t const los    = v3_norm(v3_sub(target, hero_pos(t)));
+    vec3_t const side   = v3_norm(v3_cross(los, v3(0.0f, 1.0f, 0.0f)));
+    vec3_t const up     = v3_cross(side, los);
+    float const  a      = 1.3f + 6.2831853f * MISS_TURNS * (t - FIRE0);
+    float const  r      = MISS * (1.0f - hit_weight(t));
+    return v3_add(target, v3_add(v3_scale(side, r * cosf(a)), v3_scale(up, r * sinf(a))));
 }
 
 static xform_t hero_base(float t) {
@@ -159,14 +213,6 @@ static xform_t hero_base(float t) {
     vec3_t const right = v3_norm(v3_cross(v3(0.0f, 1.0f, 0.0f), fwd));
     float const  bank  = t < T_EMERGE ? 0.0f : clampf(-0.06f * v3_dot(acc, right), -0.8f, 0.8f);
     return (xform_t){mat3_from_fwd_up(fwd, v3(0.0f, 1.0f, 0.0f), bank), pos, HERO_SPAN};
-}
-
-static xform_t green_base(float t) {
-    return formation_pose(&FORMATION, &SLOT_GREEN, t, MARAUDER_SPAN);
-}
-
-static xform_t yellow_base(float t) {
-    return formation_pose(&FORMATION, &SLOT_YELLOW, t, MARAUDER_SPAN);
 }
 
 // A ship warping in at `tw` whose own pose is base(t): the ship once it
@@ -186,13 +232,72 @@ static void submit_warp_in(xform_t (*base)(float), float tw, float t, float size
     warp_submit_flash(warp_point(&at_flash, WARP_IN), size, t, tw, WARP_IN, seed);
 }
 
+// Where a ray from `from` along `dir` first strikes a marauder or a rock,
+// no further than the beam's range.
+static float beam_reach(vec3_t from, vec3_t dir, float t) {
+    float         d = LASER_STYLE_PLAYER.range;
+    xform_t const g = green_base(t), y = yellow_base(t);
+    marauder_raycast(&g, from, dir, d, &d);
+    marauder_raycast(&y, from, dir, d, &d);
+    for (int i = 0; i < ROCK_N; i++) {
+        rock_t const* r = &ROCKS[i];
+        xform_t const x = {mat3_axis_angle(v3_norm(r->axis), r->spin * t), r->pos, r->radius};
+        asteroid_raycast(r->shape, &x, from, dir, d, &d);
+    }
+    return d;
+}
+
+// Hit i's spot on its target, in the target's own frame: where the beam
+// fired at the ship's middle enters the hull.
+static vec3_t hit_spot(int i) {
+    float const   th   = hit_time(i);
+    xform_t const hero = hero_base(th);
+    xform_t const ship = HITS[i].yellow ? yellow_base(th) : green_base(th);
+    vec3_t const  gun  = player_ship_gun(&hero, HITS[i].k & 1);
+    vec3_t const  dir  = v3_norm(v3_sub(ship.pos, gun));
+    float         d    = v3_len(v3_sub(ship.pos, gun));
+    marauder_raycast(&ship, gun, dir, d, &d);
+    vec3_t const rel = v3_scale(v3_sub(v3_add(gun, v3_scale(dir, d)), ship.pos), 1.0f / ship.scale);
+    return v3(v3_dot(rel, ship.r.right), v3_dot(rel, ship.r.up), v3_dot(rel, ship.r.fwd));
+}
+
+static int hit_index(int k) {
+    for (int i = 0; i < HIT_N; i++) {
+        if (HITS[i].k == k) return i;
+    }
+    return -1;
+}
+
+// The shot lit at t, if any: along the nose from alternate pods; a hit
+// ends on its spot on the hull, a miss runs on until it leaves the frame
+// (or strikes whatever it meets).
 static void submit_fire(float t) {
     if (t < FIRE0) return;
     int const   k  = (int)floorf((t - FIRE0) / FIRE_INTERVAL);
     float const tf = FIRE0 + (float)k * FIRE_INTERVAL;
     if (tf > FIRE1 || !laser_lit(t, tf, &LASER_STYLE_PLAYER)) return;
     xform_t const hero = hero_base(t);
-    laser_submit_ray(player_ship_gun(&hero, k & 1), v3_norm(hero.r.fwd), t, tf, &LASER_STYLE_PLAYER);
+    vec3_t const  gun  = player_ship_gun(&hero, k & 1);
+    int const     h    = hit_index(k);
+    if (h >= 0) {
+        xform_t const ship = HITS[h].yellow ? yellow_base(t) : green_base(t);
+        laser_submit_beam(gun, xform_apply(&ship, hit_spot(h)), t, tf, &LASER_STYLE_PLAYER);
+    } else {
+        vec3_t const dir = v3_norm(hero.r.fwd);
+        laser_submit_beam(gun, v3_add(gun, v3_scale(dir, beam_reach(gun, dir, t))), t, tf, &LASER_STYLE_PLAYER);
+    }
+}
+
+// The hits: sparks off the hull, riding with the ship. (No burst: with
+// the rocks in view a fireball's textured shells would overrun the list.)
+static void submit_hits(float t) {
+    for (int i = 0; i < HIT_N; i++) {
+        float const th = hit_time(i);
+        if (t < th || t > th + IMPACT_SECS) continue;
+        xform_t const ship = HITS[i].yellow ? yellow_base(t) : green_base(t);
+        vec3_t const  at   = xform_apply(&ship, hit_spot(i));
+        impact_submit(at, v3_sub(hero_pos(t), at), 1.2f, t, th, 300u + (unsigned)i);
+    }
 }
 
 // --- Scene ------------------------------------------------------------------
@@ -201,6 +306,7 @@ static void ambush_init(char const* asset_dir) {
     player_ship_init(asset_dir);
     marauder_init();
     asteroid_init();
+    explosion_init();  // the hits' sparks
     system2_init();
 }
 
@@ -208,6 +314,7 @@ static void ambush_shutdown(void) {
     player_ship_shutdown();
     marauder_shutdown();
     asteroid_shutdown();
+    explosion_shutdown();
     system2_shutdown();
 }
 
@@ -227,12 +334,17 @@ static void ambush_camera(double td) {
         // Low beside the rock, a few units off the marauders' line: their
         // flashes far off, then turning to follow them in, past and away.
         camera_look_at(v3(8.2f, -1.5f, -6.0f), formation_centre(&FORMATION, t), 0.0f);
-    } else {
+    } else if (t < SHOT_FIRE) {
         // Behind and above the hero, looking ahead along its nose.
         xform_t const hero = hero_base(t);
         vec3_t const  fwd  = v3_norm(hero.r.fwd);
         vec3_t const  eye  = v3_add(v3_add(hero.pos, v3_scale(fwd, -3.2f)), v3(0.0f, 1.0f, 0.0f));
         camera_look_at(eye, v3_add(hero.pos, v3_scale(fwd, 6.0f)), 0.0f);
+    } else {
+        // Ahead of the pair on the sunlit side (-x), riding with them and
+        // looking back past them at the hero on their tail.
+        vec3_t const c = formation_centre(&FORMATION, t);
+        camera_look_at(v3_add(c, v3(-1.9f, 0.9f, -3.4f)), v3_add(c, v3(0.0f, 0.3f, 2.4f)), 0.0f);
     }
 }
 
@@ -247,11 +359,12 @@ static void ambush_submit(double td) {
     submit_warp_in(hero_base, T_HERO_IN, t, 1.6f, 91u, true, MARAUDER_GREEN);
     submit_warp_in(green_base, T_GREEN_IN, t, 1.3f, 92u, false, MARAUDER_GREEN);
     submit_warp_in(yellow_base, T_YELLOW_IN, t, 1.3f, 93u, false, MARAUDER_YELLOW);
+    submit_hits(t);
     submit_fire(t);
 }
 
 static char const* ambush_shot(double t) {
-    return t < SHOT_PASS ? "arrival" : t < SHOT_AMBUSH ? "pass" : "ambush";
+    return t < SHOT_PASS ? "arrival" : t < SHOT_AMBUSH ? "pass" : t < SHOT_FIRE ? "ambush" : "guns";
 }
 
 scene_def_t const SCENE_ASTEROID_AMBUSH = {

@@ -7,9 +7,12 @@
 //  yellow ship, each throwing sparks off its hull and leaving a burn,
 //  and then it blows apart -- its parts tumbling away through a fireball
 //  (explosion.h, marauder_submit_debris). The green one flies on alone
-//  under more fire for a couple of seconds, then warps away.
+//  under more fire for a couple of seconds; the camera swings round
+//  behind it and watches it warp away.
 //
-//  One shot, riding with the formation off the green ship's right.
+//  One shot, riding with the formation off the green ship's right; after
+//  the blast it follows the green ship. The guns stop before the swing:
+//  from behind, a beam that misses would shrink to a point mid-screen.
 // =====================================================================
 
 #include <math.h>
@@ -28,10 +31,12 @@
 #define FIRE0         0.6f  // the hero's guns: first salvo, at both ...
 #define FIRE1         3.4f
 #define FIRE2         4.4f  // ... then at the green one alone
-#define FIRE3         5.9f
+#define FIRE3         5.2f
 #define FIRE_INTERVAL 0.2f
 #define T_BOOM        3.5f  // the yellow ship blows up
 #define T_GREEN_WARP  6.4f
+#define T_SWING0      5.3f  // the camera swings round behind the green ship
+#define T_SWING1      6.2f
 
 // --- Ships ------------------------------------------------------------------
 #define MARAUDER_SPAN 0.9f
@@ -56,7 +61,9 @@ static slot_t const SLOT_YELLOW = {
 #define HERO_SLOT \
     { 0.3f, 0.9f, -16.0f }
 
-// The shots that hit the yellow ship, and where (its model space).
+// The shots that hit the yellow ship, and where they are aimed (its model
+// space); each strikes the hull where the beam towards that point first
+// meets it.
 typedef struct {
     int    k;  // shot number: fired at FIRE0 + k * FIRE_INTERVAL
     vec3_t at;
@@ -73,6 +80,11 @@ static hit_t const HITS[] = {
 // both: the yellow one blows up at a safe distance from the lens.
 #define CAM_OFFSET \
     { 1.6f, 0.45f, -1.3f }
+// ... and after the swing: behind it, a little right and above, looking
+// along its flight so the warp's streak and flash are in view.
+#define CAM_CHASE \
+    { 0.7f, 0.6f, -3.2f }
+#define CHASE_LEAD 6.0f  // units ahead of the green ship the camera looks, after the swing
 
 // The green ship's climb away from the blast, in the formation's frame.
 static vec3_t green_climb(float t) {
@@ -117,6 +129,29 @@ static vec3_t miss_aim(int k, float t, vec3_t from) {
     return v3_add(target, v3_add(v3_scale(side, r * cosf(a)), v3_scale(up, r * sinf(a))));
 }
 
+static float hit_time(int i) {
+    return FIRE0 + (float)HITS[i].k * FIRE_INTERVAL;
+}
+
+// The hero's gun `side` at t.
+static vec3_t hero_gun(float t, int side) {
+    return v3_add(hero_pos(t), v3(side ? 0.3f : -0.3f, -0.05f, -0.9f));
+}
+
+// Hit i's spot on the yellow ship, in its own frame: where the beam from
+// the gun towards the aimed point first meets the hull.
+static vec3_t hit_spot(int i) {
+    float const   th  = hit_time(i);
+    xform_t const y   = yellow_pose(th);
+    vec3_t const  gun = hero_gun(th, HITS[i].k & 1);
+    vec3_t const  aim = xform_apply(&y, HITS[i].at);
+    vec3_t const  dir = v3_norm(v3_sub(aim, gun));
+    float         d   = v3_len(v3_sub(aim, gun));
+    marauder_raycast(&y, gun, dir, d, &d);
+    vec3_t const rel = v3_scale(v3_sub(v3_add(gun, v3_scale(dir, d)), y.pos), 1.0f / y.scale);
+    return v3(v3_dot(rel, y.r.right), v3_dot(rel, y.r.up), v3_dot(rel, y.r.fwd));
+}
+
 static void submit_fire(float t) {
     for (int salvo = 0; salvo < 2; salvo++) {
         float const f0 = salvo ? FIRE2 : FIRE0, f1 = salvo ? FIRE3 : FIRE1;
@@ -126,11 +161,11 @@ static void submit_fire(float t) {
         if (tf > f1 || !laser_lit(t, tf, &LASER_STYLE_PLAYER)) continue;
         // The hero's pods, a little ahead of its centre (it flies -z); its
         // nose is on the aim, so the beam runs from the pod towards it.
-        vec3_t const gun = v3_add(hero_pos(t), v3((k & 1) ? 0.3f : -0.3f, -0.05f, -0.9f));
+        vec3_t const gun = hero_gun(t, k & 1);
         int const    h   = salvo ? -1 : hit_index(k);
         if (h >= 0) {
             xform_t const y = yellow_pose(t);
-            laser_submit_beam(gun, xform_apply(&y, HITS[h].at), t, tf, &LASER_STYLE_PLAYER);
+            laser_submit_beam(gun, xform_apply(&y, hit_spot(h)), t, tf, &LASER_STYLE_PLAYER);
         } else {
             laser_submit_ray(gun, v3_norm(v3_sub(miss_aim(k, t, gun), gun)), t, tf, &LASER_STYLE_PLAYER);
         }
@@ -141,10 +176,10 @@ static void submit_fire(float t) {
 // until the whole ship goes.
 static void submit_hits(float t) {
     for (int i = 0; i < HIT_N; i++) {
-        float const th = FIRE0 + (float)HITS[i].k * FIRE_INTERVAL;
+        float const th = hit_time(i);
         if (t < th || t >= T_BOOM) continue;
         xform_t const y  = yellow_pose(t);
-        vec3_t const  at = xform_apply(&y, HITS[i].at);
+        vec3_t const  at = xform_apply(&y, hit_spot(i));
         impact_submit(at, v3_sub(at, hero_pos(t)), 0.9f, t, th, 40u + (unsigned)i);
         explosion_submit(at, v3(0.0f, 0.0f, 0.0f), BURN_SIZE * MARAUDER_SPAN, t, th, 50u + (unsigned)i);
     }
@@ -176,10 +211,15 @@ static void downfall_camera(double td) {
     vec3_t const green = v3_add(formation_slot_pos(&FORMATION, &SLOT_GREEN, t), climb);
     vec3_t const yel   = formation_slot_pos(&FORMATION, &SLOT_YELLOW, t);
     vec3_t const bob   = v3(0.04f * sinf(0.7f * t), 0.04f * sinf(0.9f * t + 1.0f), 0.0f);
-    vec3_t const eye   = v3_add(v3_add(green, formation_to_world(&FORMATION, (vec3_t)CAM_OFFSET)), bob);
-    // Across at both; after the blast, onto the green one.
+    // Off its right; then round behind it.
+    float const  s     = smoothstep(T_SWING0, T_SWING1, t);
+    vec3_t const off   = v3_lerp((vec3_t)CAM_OFFSET, (vec3_t)CAM_CHASE, s);
+    vec3_t const eye   = v3_add(v3_add(green, formation_to_world(&FORMATION, off)), bob);
+    // Across at both; after the blast, onto the green one; after the
+    // swing, ahead along its flight.
     float const  k     = smoothstep(T_BOOM, T_BOOM + 1.0f, t);
-    camera_look_at(eye, v3_lerp(v3_lerp(green, yel, 0.6f), v3_lerp(green, yel, 0.25f), k), 0.0f);
+    vec3_t const look  = v3_lerp(v3_lerp(green, yel, 0.6f), green, k);
+    camera_look_at(eye, v3_add(look, formation_to_world(&FORMATION, v3(0.0f, 0.0f, CHASE_LEAD * s))), 0.0f);
 }
 
 static void downfall_submit(double td) {
@@ -205,6 +245,10 @@ static void downfall_submit(double td) {
     submit_fire(t);
 }
 
+static char const* downfall_shot(double t) {
+    return t < T_BOOM ? "hits" : t < T_SWING0 ? "blast" : "warp";
+}
+
 scene_def_t const SCENE_MARAUDER_DOWNFALL = {
     .name     = "marauder_downfall",
     .duration = SCENE_SECS,
@@ -213,4 +257,5 @@ scene_def_t const SCENE_MARAUDER_DOWNFALL = {
     .enter    = downfall_enter,
     .camera   = downfall_camera,
     .submit   = downfall_submit,
+    .shot     = downfall_shot,
 };

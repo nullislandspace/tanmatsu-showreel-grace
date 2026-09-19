@@ -63,6 +63,19 @@ static vec3_t aim(int k) {
     return v3(x, y, z);
 }
 
+// Where shot k, fired at tf towards its aim point, strikes: the aim
+// point, or a building of the base in the way.
+static vec3_t strike(int k, float tf) {
+    bool const    yellow = (k & 1) != 0;
+    xform_t const pose   = flight_pose(yellow ? &YELLOW_PATH : &GREEN_PATH, tf, MARAUDER_SPAN, 0.0f);
+    vec3_t const  gun    = marauder_gun(&pose, (k >> 1) & 1);
+    vec3_t const  target = aim(k);
+    vec3_t const  dir    = v3_norm(v3_sub(target, gun));
+    float         d      = v3_len(v3_sub(target, gun));
+    planet_base_raycast(gun, dir, d, &d);
+    return v3_add(gun, v3_scale(dir, d));
+}
+
 static void submit_fire(float t) {
     if (t < FIRE_START) return;
     // Every shot fired so far whose impact may still be burning.
@@ -73,9 +86,9 @@ static void submit_fire(float t) {
         bool const    yellow = (k & 1) != 0;
         xform_t const pose   = flight_pose(yellow ? &YELLOW_PATH : &GREEN_PATH, t, MARAUDER_SPAN, 0.0f);
         vec3_t const  gun    = marauder_gun(&pose, (k >> 1) & 1);
-        vec3_t const  target = aim(k);
-        laser_submit_beam(gun, target, t, tf, &LASER_STYLE_MARAUDER);
-        impact_submit(target, v3(0.0f, 1.0f, 0.0f), 0.9f, t, tf, 300u + (unsigned)k);
+        vec3_t const  at     = strike(k, tf);
+        laser_submit_beam(gun, at, t, tf, &LASER_STYLE_MARAUDER);
+        impact_submit(at, v3_sub(gun, at), 0.9f, t, tf, 300u + (unsigned)k);
     }
 }
 

@@ -132,3 +132,9 @@ void mesh_blob(mesh_t* m, int subdiv, float (*radius)(vec3_t dir, void* user), v
 // Signed volume of the triangles from index `first_tri` on (positive
 // for a closed outward-wound solid).
 float mesh_signed_volume(mesh_t const* m, int first_tri);
+
+// Where a ray first strikes the mesh posed by `x`: from world point
+// `from` along `dir` (normalised), no further than `max`. True with the
+// distance in *dist when it strikes a triangle (either side); a laser
+// beam that hits stops there.
+bool mesh_raycast(mesh_t const* m, xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist);

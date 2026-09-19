@@ -96,3 +96,7 @@ vec3_t marauder_gun(xform_t const* x, int side) {
     float const s = side ? 1.0f : -1.0f;
     return xform_apply(x, v3(s * MARAUDER_GUN_X, MARAUDER_GUN_Y, MARAUDER_GUN_Z));
 }
+
+bool marauder_raycast(xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist) {
+    return s_ready && mesh_raycast(&s_mesh, x, from, dir, max, dist);
+}

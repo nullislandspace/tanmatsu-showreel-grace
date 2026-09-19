@@ -20,11 +20,19 @@
 //                 (vertex-to-triangle, both ways). Touching (< CONTACT)
 //                 fails unless the scene allows that pair.
 //    framing      each object's largest on-screen extent per shot.
+//    beams        every laser beam (a line in LASER_RED / LASER_BLUE)
+//                 must end on something -- a hull (within BEAM_ON_HULL),
+//                 the ground (y = 0) -- or run out of the frame: a beam
+//                 whose drawn end is in view in mid-air fails (a shot
+//                 that stops in the middle of the screen). A beam that
+//                 passes through a mesh object other than the one it
+//                 starts on or ends on fails too (a shot through a ship
+//                 or a rock); fireballs do not count.
 //
 //  Mesh objects are the mesh_submit() calls of a frame, named after the
 //  mesh (mesh_t.name) and numbered in submit order: marauder#0,
-//  marauder#1. Flames, beams and stars are not objects; they only count
-//  towards the lists.
+//  marauder#1. Flames, beams and stars are not objects; they count
+//  towards the lists, and beams are checked against the objects.
 //
 //  Before the scenes, a self-test runs synthetic cases the checker must
 //  catch (an eye 0.3 from a box, two boxes overlapping, one textured
@@ -44,51 +52,58 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "assets/laser.h"
 #include "horizon.h"
 #include "mesh_render.h"
 #include "scenes/scenes.h"
 #include "synthengine3d.h"
 
-#define FPS         30
-#define NEAR        RENDER_NEAR_CLIP_Z
-#define NEAR_MARGIN 0.1f
-#define CONTACT     0.02f
-#define TRI_CAP     4096  // se_scene.c SCENE_TRI_CAP (private)
-#define LINE_CAP    4096  // se_scene.c SCENE_LINE_CAP (private)
+#define FPS          30
+#define NEAR         RENDER_NEAR_CLIP_Z
+#define NEAR_MARGIN  0.1f
+#define CONTACT      0.02f
+#define BEAM_ON_HULL 0.05f  // a beam's end this near a hull is on it
+#define BEAM_MUZZLE  0.3f   // a beam starts on the object this near its muzzle
+#define TRI_CAP      4096   // se_scene.c SCENE_TRI_CAP (private)
+#define LINE_CAP     4096   // se_scene.c SCENE_LINE_CAP (private)
 
 // --- What to check ----------------------------------------------------------
 
 typedef struct {
     scene_def_t const* scene;
-    float              secs;        // 0: the scene's duration
-    char const*        near_ok;     // objects allowed through the near plane, "a,b" (globs)
-    char const*        contact_ok;  // object pairs allowed to touch, "a-b,c-d" (globs)
-    char const*        why;         // why those are allowed
+    float              secs;         // 0: the scene's duration
+    char const*        near_ok;      // objects allowed through the near plane, "a,b" (globs)
+    char const*        contact_ok;   // object pairs allowed to touch, "a-b,c-d" (globs)
+    char const*        why;          // why those are allowed
+    bool               loose_beams;  // beams may end in mid-air (a viewer firing at nothing)
 } check_t;
 
 static check_t const CHECKS[] = {
-    {&SCENE_TITLE, 0.0f, NULL, NULL, NULL},
-    {&SCENE_MARAUDER_APPROACH, 0.0f, NULL, NULL, NULL},
+    {&SCENE_TITLE, 0.0f, NULL, NULL, NULL, false},
+    {&SCENE_MARAUDER_APPROACH, 0.0f, NULL, NULL, NULL, false},
     {&SCENE_PAD_STRAFE, 0.0f, NULL, "apron*-base*,player_ship*-base*",
-     "the base stands on the apron; the hero sits on the pad"},
+     "the base stands on the apron; the hero sits on the pad", false},
     {&SCENE_EMERGENCY_TAKEOFF, 0.0f, NULL, "apron*-base*,player_ship*-base*",
-     "the base stands on the apron; the hero starts on the pad"},
+     "the base stands on the apron; the hero starts on the pad", false},
     {&SCENE_PLANET_LANDING, 0.0f, NULL, "apron*-base*,player_ship*-base*",
-     "the base stands on the apron; the ship lands on the pad (part of the base)"},
-    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL},
+     "the base stands on the apron; the ship lands on the pad (part of the base)", false},
+    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL, false},
     {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, "player_ship*-fireball*,fireball*-fireball*",
-     "the hits' bursts go off on the player's hull; a fireball's core sits inside its shell"},
-    {&SCENE_WARP_OUT, 0.0f, NULL, NULL, NULL},
-    {&SCENE_ASTEROID_AMBUSH, 0.0f, NULL, NULL, NULL},
+     "the hits' bursts go off on the player's hull; a fireball's core sits inside its shell", false},
+    {&SCENE_WARP_OUT, 0.0f, NULL, NULL, NULL, false},
+    {&SCENE_ASTEROID_AMBUSH, 0.0f, NULL, NULL, NULL, false},
     {&SCENE_MARAUDER_DOWNFALL, 0.0f, "marauder/p*",
      "marauder#1-fireball*,marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*",
      "the hits' burns sit on the yellow ship (marauder#1); the wreck's parts start out touching each other and the "
-     "fireball, and one flies out through the lens"},
-    {&SCENE_HERO_ROLLS, 0.0f, NULL, NULL, NULL},
-    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},
+     "fireball, and one flies out through the lens",
+     false},
+    {&SCENE_HERO_ROLLS, 0.0f, NULL, NULL, NULL, false},
+    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL, false},
     {&SCENE_ASSET_VIEWER, 0.0f, NULL, "marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*,apron*-base*",
-     "an exploding ship's parts start out touching each other and the fireball; the base stands on the apron"},
-    {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL},
+     "an exploding ship's parts start out touching each other and the fireball; the base stands on the apron; the "
+     "ships fire their guns at nothing",
+     true},
+    {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL, false},
 };
 #define CHECK_N ((int)(sizeof(CHECKS) / sizeof(CHECKS[0])))
 
@@ -130,12 +145,22 @@ typedef struct {
     float d, t;
 } pair_stat_t;
 
+// Beam faults of one kind in one shot: how many frames, and the first.
+typedef struct {
+    int   frames;
+    float t;
+    char  shot[24];
+    char  what[LABEL_LEN];  // the object passed through (through only)
+} beam_stat_t;
+
 static label_stat_t s_labels[MAX_LABELS];
 static int          s_label_n;
 static shot_stat_t  s_shots[MAX_SHOTS];
 static int          s_shot_n;
 static pair_stat_t  s_pairs[MAX_LABELS * MAX_LABELS / 2];
 static int          s_pair_n;
+static beam_stat_t  s_beam_mid, s_beam_through;
+static int          s_beam_n_total;  // beams seen over the scene
 static bool         s_verbose;
 static FILE*        s_out;  // report output (the self-test silences it)
 
@@ -156,6 +181,13 @@ static obj_t s_obj[MAX_OBJ];
 static int   s_obj_n;
 static int   s_cur = -1;  // object being submitted, -1 = none
 static int   s_n_tri, s_n_ttri, s_n_line, s_n_point;
+
+#define MAX_BEAMS 32
+typedef struct {
+    vec3_t a, b;  // muzzle, drawn end
+} beam_t;
+static beam_t s_beam[MAX_BEAMS];
+static int    s_beam_n;
 
 static int label_index(char const* label) {
     for (int i = 0; i < s_label_n; i++) {
@@ -302,7 +334,8 @@ void sc_tri(vec3_t const v[3], bool textured) {
     }
 }
 
-void sc_line(vec3_t a, vec3_t b) {
+void sc_line(vec3_t a, vec3_t b, uint32_t argb) {
+    if ((argb == LASER_RED || argb == LASER_BLUE) && s_beam_n < MAX_BEAMS) s_beam[s_beam_n++] = (beam_t){a, b};
     vec3_t const ca = sc_to_camera(a), cb = sc_to_camera(b);
     if (ca.z < NEAR && cb.z < NEAR) return;
     s_n_line++;
@@ -445,6 +478,90 @@ static void clearances(float t) {
     }
 }
 
+// --- Beams ---------------------------------------------------------------------------
+
+// Distance along the segment a->b (as a fraction) where it crosses
+// triangle pqr, or -1 (Moller-Trumbore).
+static float seg_tri(vec3_t a, vec3_t b, vec3_t p, vec3_t q, vec3_t r) {
+    vec3_t const d  = v3_sub(b, a);
+    vec3_t const e1 = v3_sub(q, p), e2 = v3_sub(r, p);
+    vec3_t const h   = v3_cross(d, e2);
+    float const  det = v3_dot(e1, h);
+    if (fabsf(det) < 1e-12f) return -1.0f;
+    float const  inv = 1.0f / det;
+    vec3_t const s   = v3_sub(a, p);
+    float const  u   = inv * v3_dot(s, h);
+    if (u < 0.0f || u > 1.0f) return -1.0f;
+    vec3_t const qv = v3_cross(s, e1);
+    float const  v  = inv * v3_dot(d, qv);
+    if (v < 0.0f || u + v > 1.0f) return -1.0f;
+    float const f = inv * v3_dot(e2, qv);
+    return f >= 0.0f && f <= 1.0f ? f : -1.0f;
+}
+
+// Distance from p to the nearest triangle of w.
+static float point_obj_dist(world_t const* w, mesh_t const* m, vec3_t p) {
+    return verts_to_tris(&(world_t){.v = &p, .v0 = 0, .vn = 1}, w, m, FLT_MAX);
+}
+
+static void beam_fault(beam_stat_t* b, float t, char const* shot, char const* what) {
+    if (b->frames++ == 0) {
+        b->t = t;
+        snprintf(b->shot, sizeof(b->shot), "%s", shot);
+        snprintf(b->what, sizeof(b->what), "%s", what ? what : "");
+    }
+}
+
+static void beams(float t, char const* shot) {
+    if (s_beam_n == 0) return;
+    s_beam_n_total += s_beam_n;
+    world_t w[MAX_OBJ];
+    for (int i = 0; i < s_obj_n; i++) world_build(&w[i], &s_obj[i]);
+    for (int k = 0; k < s_beam_n; k++) {
+        beam_t const* bm    = &s_beam[k];
+        // Which objects it starts and ends on.
+        float         end_d = FLT_MAX;
+        int           from  = -1;
+        for (int i = 0; i < s_obj_n; i++) {
+            float const de = point_obj_dist(&w[i], s_obj[i].mesh, bm->b);
+            if (de < end_d) end_d = de;
+            if (from < 0 && point_obj_dist(&w[i], s_obj[i].mesh, bm->a) < BEAM_MUZZLE) from = i;
+        }
+        bool const   on_hull = end_d < BEAM_ON_HULL;
+        bool const   ground  = fabsf(bm->b.y) < 1e-3f;
+        // Its drawn end in view, in mid-air?
+        vec3_t const cb      = sc_to_camera(bm->b);
+        if (!on_hull && !ground && cb.z >= NEAR) {
+            float sx, sy;
+            sc_project(cb, &sx, &sy);
+            if (sx >= 0.0f && sx <= (float)DISPLAY_LOG_W && sy >= 0.0f && sy <= (float)DISPLAY_LOG_H) {
+                beam_fault(&s_beam_mid, t, shot, NULL);
+                if (s_verbose)
+                    fprintf(s_out, "    %6.2f s  beam ends in mid-air at screen (%.0f, %.0f)\n", (double)t, (double)sx,
+                            (double)sy);
+            }
+        }
+        // Through anything on the way?
+        float const len = v3_len(v3_sub(bm->b, bm->a));
+        for (int i = 0; i < s_obj_n; i++) {
+            if (i == from || strncmp(s_obj[i].base, "fireball", 8) == 0) continue;
+            mesh_t const* m   = s_obj[i].mesh;
+            bool          hit = false;
+            for (int j = w[i].t0; j < w[i].t0 + w[i].tn && !hit; j++) {
+                float const f = seg_tri(bm->a, bm->b, w[i].v[m->t[j].a], w[i].v[m->t[j].b], w[i].v[m->t[j].c]);
+                // Crossing a hull right where the beam ends is the hit itself.
+                if (f >= 0.0f && (1.0f - f) * len > 2.0f * BEAM_ON_HULL) hit = true;
+            }
+            if (hit) {
+                beam_fault(&s_beam_through, t, shot, s_labels[s_obj[i].label].label);
+                if (s_verbose)
+                    fprintf(s_out, "    %6.2f s  beam passes through %s\n", (double)t, s_labels[s_obj[i].label].label);
+            }
+        }
+    }
+    for (int i = 0; i < s_obj_n; i++) world_free(&w[i]);
+}
+
 // --- Frame bookkeeping ------------------------------------------------------------------
 
 static shot_stat_t* shot_stat(char const* name) {
@@ -501,6 +618,7 @@ static void frame_end(int frame, float t, char const* shot) {
         }
     }
     clearances(t);
+    beams(t, shot);
 }
 
 // "a,b,c" contains `item`?
@@ -526,6 +644,8 @@ static int check_scene(check_t const* c) {
     scene_def_t const* sc   = c->scene;
     float const        secs = c->secs > 0.0f ? c->secs : sc->duration;
     s_label_n = s_shot_n = s_pair_n = 0;
+    s_beam_mid = s_beam_through = (beam_stat_t){0};
+    s_beam_n_total              = 0;
 
     if (sc->init) sc->init("textures");
     if (sc->enter) sc->enter();
@@ -534,6 +654,7 @@ static int check_scene(check_t const* c) {
         double const t = (double)f / FPS;
         s_obj_n        = 0;
         s_n_tri = s_n_ttri = s_n_line = s_n_point = 0;
+        s_beam_n                                  = 0;
         if (sc->camera) sc->camera(t);
         if (sc->submit) sc->submit(t);
         char const* shot = sc->shot ? sc->shot(t) : NULL;
@@ -620,6 +741,24 @@ static int check_scene(check_t const* c) {
     }
 
     if (c->contact_ok) fprintf(s_out, "    allowed to touch: %s -- %s\n", c->contact_ok, c->why ? c->why : "");
+
+    if (s_beam_n_total) {
+        fprintf(s_out, "  beams (%d beam-frames)\n", s_beam_n_total);
+        if (s_beam_mid.frames && c->loose_beams) {
+            fprintf(s_out, "    a beam ends in mid-air in view in %d frames (allowed)\n", s_beam_mid.frames);
+        } else if (s_beam_mid.frames) {
+            fprintf(s_out, "    FAIL: a beam ends in mid-air in view in %d frames, first at %.2f s (%s)\n",
+                    s_beam_mid.frames, (double)s_beam_mid.t, s_beam_mid.shot);
+            fails++;
+        }
+        if (s_beam_through.frames) {
+            fprintf(s_out, "    FAIL: a beam passes through an object in %d frames, first %s at %.2f s (%s)\n",
+                    s_beam_through.frames, s_beam_through.what, (double)s_beam_through.t, s_beam_through.shot);
+            fails++;
+        }
+        if (!s_beam_mid.frames && !s_beam_through.frames)
+            fprintf(s_out, "    every beam ends on a hull or the ground, or leaves the frame\n");
+    }
     fprintf(s_out, "  framing (largest on-screen extent per shot, px, w x h; screen x reached)\n");
     for (int i = 0; i < s_shot_n; i++) {
         shot_stat_t const* s = &s_shots[i];
@@ -649,6 +788,8 @@ enum {
     ST_NEAR,
     ST_CONTACT,
     ST_CAP,
+    ST_BEAM_MID,
+    ST_BEAM_THROUGH,
     ST_COUNT
 };
 
@@ -674,6 +815,11 @@ static void st_submit(double t) {
     // as a part (the box's only one), so the part path is tested too.
     a.pos = v3(s_st_case == ST_CONTACT ? 0.8f : 1.5f, 0.0f, 0.0f);
     mesh_submit_part(&s_box, 0, &a, &mat, 1);
+    // Beams: the clean case's ends on the first box; one stops in mid-air
+    // in view; one runs out of the frame, through both boxes.
+    if (s_st_case == ST_CLEAN) scene_line(2.0f, 0.0f, -2.0f, 0.5f, 0.0f, 0.0f, LASER_BLUE);
+    if (s_st_case == ST_BEAM_MID) scene_line(-2.0f, 1.5f, 0.0f, -1.0f, 1.5f, 0.0f, LASER_RED);
+    if (s_st_case == ST_BEAM_THROUGH) scene_line(-3.0f, 0.0f, 0.0f, 300.0f, 0.0f, 0.0f, LASER_RED);
     if (s_st_case == ST_CAP) {
         static se_texture_t* tex;
         if (tex == NULL) tex = se_texture_load("selftest", 0);
@@ -722,10 +868,11 @@ static bool horizon_test(void) {
 }
 
 static bool self_test(void) {
-    static char const* const NAME[ST_COUNT] = {"clean", "near plane", "contact", "list cap"};
+    static char const* const NAME[ST_COUNT] = {"clean",    "near plane",   "contact",
+                                               "list cap", "beam mid-air", "beam through"};
     scene_def_t const        st             = {
                            .name = "selftest", .duration = 0.2f, .init = st_init, .shutdown = st_shutdown, .submit = st_submit};
-    check_t const c    = {&st, 0.0f, NULL, NULL, NULL};
+    check_t const c    = {&st, 0.0f, NULL, NULL, NULL, false};
     FILE* const   keep = s_out;
     bool          ok   = true;
     s_out              = fopen("/dev/null", "w");
@@ -748,7 +895,7 @@ int main(int argc, char** argv) {
     bool any = false;
     s_out    = stdout;
     if (!self_test()) return 5;
-    fprintf(s_out, "self-test: clean, near plane, contact and list-cap cases behave; horizon sides OK\n\n");
+    fprintf(s_out, "self-test: clean, near plane, contact, list-cap and beam cases behave; horizon sides OK\n\n");
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-v") == 0)
             s_verbose = true;

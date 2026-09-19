@@ -101,8 +101,7 @@ void scene_textured_tri(se_tex_vertex_t const v[3], se_texture_t const* tex, uin
 }
 
 void scene_line(float x0, float y0, float z0, float x1, float y1, float z1, uint32_t argb) {
-    (void)argb;
-    sc_line(v3(x0, y0, z0), v3(x1, y1, z1));
+    sc_line(v3(x0, y0, z0), v3(x1, y1, z1), argb);
 }
 
 void scene_point(float x, float y, float z, uint32_t argb) {

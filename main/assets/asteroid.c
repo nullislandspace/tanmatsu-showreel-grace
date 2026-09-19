@@ -35,3 +35,8 @@ void asteroid_submit(int shape, xform_t const* x) {
     if (!s_ready || shape < 0 || shape >= ASTEROID_SHAPES) return;
     mesh_submit(&s_mesh[shape], x, &s_mat, 1);
 }
+
+bool asteroid_raycast(int shape, xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist) {
+    if (!s_ready || shape < 0 || shape >= ASTEROID_SHAPES) return false;
+    return mesh_raycast(&s_mesh[shape], x, from, dir, max, dist);
+}

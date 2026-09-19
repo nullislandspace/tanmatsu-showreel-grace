@@ -244,3 +244,7 @@ void player_ship_bounds(vec3_t* lo, vec3_t* hi) {
 float player_ship_flame_reach(void) {
     return FLAME_LEN * FLICKER_TOP / RAW_SPAN;
 }
+
+bool player_ship_raycast(xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist) {
+    return s_ready && mesh_raycast(&s_mesh, x, from, dir, max, dist);
+}

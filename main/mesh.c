@@ -3,6 +3,7 @@
 // =====================================================================
 
 #include "mesh.h"
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -555,4 +556,38 @@ void mesh_cone(mesh_t* m, float r, float z0, float z1, int sides, uint8_t mat_si
         tri_planar(m, c, base + k, base + (k + 1) % sides, mat_base, rep, v3(0, 0, z0 < z1 ? -1.0f : 1.0f));
     }
     part_add(m, part_v0, part_t0);
+}
+
+bool mesh_raycast(mesh_t const* m, xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist) {
+    if (m == NULL || m->tn == 0 || x->scale <= 0.0f) return false;
+    // Into model space: R^T (p - pos) / scale. R is orthonormal, so the
+    // direction stays normalised and model distances are world / scale.
+    vec3_t const rel = v3_sub(from, x->pos);
+    vec3_t const o =
+        v3_scale(v3(v3_dot(rel, x->r.right), v3_dot(rel, x->r.up), v3_dot(rel, x->r.fwd)), 1.0f / x->scale);
+    vec3_t const d    = v3(v3_dot(dir, x->r.right), v3_dot(dir, x->r.up), v3_dot(dir, x->r.fwd));
+    float        best = max / x->scale;
+    bool         hit  = false;
+    for (int i = 0; i < m->tn; i++) {
+        // Moller-Trumbore.
+        vec3_t const p  = m->v[m->t[i].a];
+        vec3_t const e1 = v3_sub(m->v[m->t[i].b], p), e2 = v3_sub(m->v[m->t[i].c], p);
+        vec3_t const h   = v3_cross(d, e2);
+        float const  det = v3_dot(e1, h);
+        if (fabsf(det) < 1e-9f) continue;
+        float const  inv = 1.0f / det;
+        vec3_t const s   = v3_sub(o, p);
+        float const  u   = inv * v3_dot(s, h);
+        if (u < 0.0f || u > 1.0f) continue;
+        vec3_t const q = v3_cross(s, e1);
+        float const  v = inv * v3_dot(d, q);
+        if (v < 0.0f || u + v > 1.0f) continue;
+        float const f = inv * v3_dot(e2, q);
+        if (f > 0.0f && f < best) {
+            best = f;
+            hit  = true;
+        }
+    }
+    if (hit && dist) *dist = best * x->scale;
+    return hit;
 }

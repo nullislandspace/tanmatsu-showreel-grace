@@ -3,10 +3,9 @@
 // ---------------------------------------------------------------------
 //  The last scene (D-28): close beside the hero ship flying fast through
 //  the second system, space dust streaming past to show the speed. It
-//  flies straight, throws two barrel rolls -- a roll about its nose while
-//  it corkscrews round its line of flight -- and flies straight on. At
-//  the end the camera drops back and the ship pulls away from it into
-//  the distance, towards the gas giant.
+//  flies straight, rolls twice about its own centreline and flies
+//  straight on. At the end the camera drops back and the ship pulls away
+//  from it into the distance, towards the gas giant.
 //
 //  One shot, riding along beside and a little ahead of the ship.
 // =====================================================================
@@ -29,7 +28,6 @@
 // --- Flight -----------------------------------------------------------------
 #define SPEED     30.0f  // units per second, along -z
 #define HERO_SPAN 1.0f
-#define CORKSCREW 0.35f  // radius of the barrel roll's spiral round the line
 #define CAM_DECEL 16.0f  // units/s^2 the camera slows by from T_DROP
 
 // Camera offset from the ship's line: across (-x: the ship's right, the
@@ -42,16 +40,15 @@ static float roll_angle(float t) {
     return ROLLS * 6.2831853f * smoothstep(ROLL0, ROLL1, t);
 }
 
-// The ship's line of flight at t (no roll, no spiral).
+// The ship's line of flight at t.
 static vec3_t line_pos(float t) {
     return v3(0.0f, 0.0f, -SPEED * t);
 }
 
+// On the line of flight, rolling about it: the model is centred on its
+// origin (player_ship.c), so that is the hull's centreline.
 static xform_t hero_pose(float t) {
-    float const  a      = roll_angle(t);
-    // The spiral: round the line and back to it, with the roll.
-    vec3_t const spiral = v3(CORKSCREW * (cosf(a) - 1.0f), CORKSCREW * sinf(a), 0.0f);
-    return (xform_t){mat3_from_fwd_up(v3(0.0f, 0.0f, -1.0f), v3(0.0f, 1.0f, 0.0f), a), v3_add(line_pos(t), spiral),
+    return (xform_t){mat3_from_fwd_up(v3(0.0f, 0.0f, -1.0f), v3(0.0f, 1.0f, 0.0f), roll_angle(t)), line_pos(t),
                      HERO_SPAN};
 }
 

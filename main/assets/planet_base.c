@@ -70,3 +70,15 @@ backdrop_t const* planet_base_backdrop(void) {
 vec3_t planet_base_pad_centre(void) {
     return v3(0.0f, BASE_PAD_TOP, 0.0f);
 }
+
+bool planet_base_raycast(vec3_t from, vec3_t dir, float max, float* dist) {
+    if (!s_ready) return false;
+    xform_t const world = {mat3_rot_y(0.0f), v3(0.0f, 0.0f, 0.0f), 1.0f};
+    bool          hit   = false;
+    // Each cast only looks nearer than the last hit.
+    if (mesh_raycast(&s_structures, &world, from, dir, max, &max)) hit = true;
+    if (mesh_raycast(&s_apron, &world, from, dir, max, &max)) hit = true;
+    if (mesh_raycast(&s_ridge, &world, from, dir, max, &max)) hit = true;
+    if (hit && dist) *dist = max;
+    return hit;
+}

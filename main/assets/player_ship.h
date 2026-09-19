@@ -39,3 +39,8 @@ void player_ship_bounds(vec3_t* lo, vec3_t* hi);
 // How far the flames reach behind the hull's rear face at throttle 1
 // and full flicker, in model units (for framing).
 float player_ship_flame_reach(void);
+
+// Where a ray from `from` along `dir` (normalised) first strikes the hero ship
+// posed by `x`, no further than `max`: true with the distance in *dist
+// (mesh_raycast). A laser that hits stops there.
+bool player_ship_raycast(xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist);

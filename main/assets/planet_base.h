@@ -33,3 +33,8 @@ backdrop_t const* planet_base_backdrop(void);
 
 // Centre of the pad's top surface: where a ship touches down.
 vec3_t planet_base_pad_centre(void);
+
+// Where a ray from `from` along `dir` (normalised) first strikes the base
+// (its buildings, the apron or the ridge), no further than `max`: true
+// with the distance in *dist. A laser that hits stops there.
+bool planet_base_raycast(vec3_t from, vec3_t dir, float max, float* dist);

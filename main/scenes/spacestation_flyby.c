@@ -126,13 +126,6 @@ static float hit_time(hit_t const* h) {
     return h->raider->aim1 + (float)h->k * FIRE_INTERVAL;
 }
 
-static bool is_hit(raider_t const* r, int k) {
-    for (int i = 0; i < HIT_N; i++) {
-        if (HITS[i].raider == r && HITS[i].k == k) return true;
-    }
-    return false;
-}
-
 // 1 while marauder `r` is lined up for one of its hits, easing to 0
 // HIT_SWING either side: how much of its miss it drops.
 static float hit_weight(raider_t const* r, float t) {
@@ -323,15 +316,38 @@ static void set_camera(shot_t shot, float t) {
 
 // --- Lasers -----------------------------------------------------------------
 
-// Where shot k of marauder `r`, lined up for a hit, meets the player's
-// hull at t: along the gun's line, at its closest approach to the
-// player's centre, backed off to the hull's surface.
-static vec3_t hit_point(raider_t const* r, float t, int k) {
-    xform_t const pose  = raider_pose(r, t);
-    vec3_t const  fwd   = mat3_apply(&pose.r, v3(0.0f, 0.0f, 1.0f));
-    vec3_t const  gun   = marauder_gun(&pose, k & 1);
-    float const   along = v3_dot(v3_sub(path_pos(&PLAYER_PATH, t), gun), fwd);
-    return v3_add(gun, v3_scale(fwd, along - 0.2f * PLAYER_SPAN));
+static int hit_index(raider_t const* r, int k) {
+    for (int i = 0; i < HIT_N; i++) {
+        if (HITS[i].raider == r && HITS[i].k == k) return i;
+    }
+    return -1;
+}
+
+// Where hit i strikes the player, in the player's own frame: where the
+// shot, straight along the gun's line at the moment it fires, meets the
+// hull (or, should that line just graze past, the beam aimed at the
+// ship's middle). Kept in the ship's frame, the spot rolls and shudders
+// with it.
+static vec3_t hit_spot(int i) {
+    float const   th     = hit_time(&HITS[i]);
+    xform_t const pose   = raider_pose(HITS[i].raider, th);
+    xform_t const player = player_pose(th);
+    vec3_t const  gun    = marauder_gun(&pose, HITS[i].k & 1);
+    vec3_t        dir    = v3_norm(mat3_apply(&pose.r, v3(0.0f, 0.0f, 1.0f)));
+    float         d      = LASER_STYLE_MARAUDER.range;
+    if (!player_ship_raycast(&player, gun, dir, d, &d)) {
+        dir = v3_norm(v3_sub(player.pos, gun));
+        d   = v3_len(v3_sub(player.pos, gun));
+        player_ship_raycast(&player, gun, dir, d, &d);
+    }
+    vec3_t const rel = v3_sub(v3_add(gun, v3_scale(dir, d)), player.pos);
+    return v3(v3_dot(rel, player.r.right), v3_dot(rel, player.r.up), v3_dot(rel, player.r.fwd));
+}
+
+// Hit i's spot on the player at t, in the world.
+static vec3_t hit_at(int i, float t) {
+    xform_t const now = player_pose(t);
+    return v3_add(now.pos, mat3_apply(&now.r, hit_spot(i)));
 }
 
 // The shot lit at t, if any, from marauder `r`: a shot every
@@ -345,28 +361,25 @@ static void submit_lasers(raider_t const* r, float t) {
     xform_t const pose = raider_pose(r, t);
     vec3_t const  fwd  = mat3_apply(&pose.r, v3(0.0f, 0.0f, 1.0f));
     vec3_t const  gun  = marauder_gun(&pose, k & 1);
-    if (is_hit(r, k)) {
+    int const     h    = hit_index(r, k);
+    if (h >= 0) {
         // Straight ahead onto the player: the beam stops at its hull.
-        laser_submit_beam(gun, hit_point(r, t, k), t, tf, &LASER_STYLE_MARAUDER);
+        laser_submit_beam(gun, hit_at(h, t), t, tf, &LASER_STYLE_MARAUDER);
     } else {
-        laser_submit_ray(gun, fwd, t, tf, &LASER_STYLE_MARAUDER);
+        // A miss: on out of the frame (or onto the hull, should it meet it).
+        xform_t const player = player_pose(t);
+        float         d      = LASER_STYLE_MARAUDER.range;
+        player_ship_raycast(&player, gun, fwd, d, &d);
+        laser_submit_beam(gun, v3_add(gun, v3_scale(fwd, d)), t, tf, &LASER_STYLE_MARAUDER);
     }
 }
 
-// The hits' bursts, riding on the player where the beam struck: the spot
-// is kept in the ship's own frame, so the burst rolls and shudders with it.
+// The hits' bursts, riding on the player where the beam struck.
 static void submit_hits(float t) {
     for (int i = 0; i < HIT_N; i++) {
         float const th = hit_time(&HITS[i]);
         if (t < th || t > th + EXPLOSION_SECS) continue;
-        xform_t const then    = player_pose(th);
-        vec3_t const  rel     = v3_sub(hit_point(HITS[i].raider, th, HITS[i].k), then.pos);
-        vec3_t        body    = v3(0.0f, 0.0f, 0.0f);  // rel in the ship's axes (the pose is orthonormal)
-        body.x                = v3_dot(rel, mat3_apply(&then.r, v3(1.0f, 0.0f, 0.0f)));
-        body.y                = v3_dot(rel, mat3_apply(&then.r, v3(0.0f, 1.0f, 0.0f)));
-        body.z                = v3_dot(rel, mat3_apply(&then.r, v3(0.0f, 0.0f, 1.0f)));
-        xform_t const now     = player_pose(t);
-        vec3_t const  at      = v3_add(now.pos, mat3_apply(&now.r, body));
+        vec3_t const  at      = hit_at(i, t);
         xform_t const shooter = raider_pose(HITS[i].raider, th);
         vec3_t const  normal  = v3_scale(mat3_apply(&shooter.r, v3(0.0f, 0.0f, 1.0f)), -1.0f);
         impact_submit(at, normal, 1.2f, t, th, 500u + (unsigned)i);

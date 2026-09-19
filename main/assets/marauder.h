@@ -36,3 +36,8 @@ void marauder_submit_debris(xform_t const* at, vec3_t vel, marauder_livery_t liv
 // World position of gun muzzle `side` (0 = left, 1 = right) on the ship
 // posed by `x` -- where a laser bolt starts.
 vec3_t marauder_gun(xform_t const* x, int side);
+
+// Where a ray from `from` along `dir` (normalised) first strikes the marauder
+// posed by `x`, no further than `max`: true with the distance in *dist
+// (mesh_raycast). A laser that hits stops there.
+bool marauder_raycast(xform_t const* x, vec3_t from, vec3_t dir, float max, float* dist);

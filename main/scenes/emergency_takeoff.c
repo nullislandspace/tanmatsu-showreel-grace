@@ -9,8 +9,10 @@
 //  Every gun fires straight ahead, so every beam runs along its ship's
 //  body. The marauders turn their noses to just past the hero on their
 //  own side, and their beams run on until they leave the frame or strike
-//  the ground. The hero aims into the gap between them, sweeping its guns
-//  across it, so its beams pass close by each marauder.
+//  the ground. The hero puts its nose on the green one, then swings it
+//  onto the yellow one: its beams (the pods' guns converging on the nose's
+//  aim) strike their noses in sparks. Seen from behind the hero, a beam
+//  that missed would shrink to a point in mid-screen.
 //
 //  Two shots: low by the pad for the lift-off, looking up; then riding
 //  behind the climbing hero for the crossing.
@@ -38,6 +40,8 @@
 #define HERO_FIRE0      4.4f  // the hero's guns, alternating
 #define HERO_FIRE1      5.3f
 #define HERO_INTERVAL   0.15f
+#define HERO_SWAP0      4.72f  // the hero's nose swings from the green ship to the yellow one
+#define HERO_SWAP1      4.98f  // (the shot in between, at 4.85, is held)
 #define RAIDER_FIRE0    4.2f
 #define RAIDER_FIRE1    5.0f  // before they are too close to keep their noses on it
 #define RAIDER_INTERVAL 0.2f
@@ -49,10 +53,8 @@
 #define CROSS_SIDE    2.6f  // the marauders' lateral offset at the crossing
 
 // --- Aiming -------------------------------------------------------------------
-#define AIM_TURN      0.4f   // seconds a ship takes to bring its nose on / off its aim
-#define RAIDER_MISS   1.65f  // past the hero on the marauder's side: clear of its wingtips (half-span 1)
-#define HERO_SWEEP    0.4f   // the hero's aim swings this far either side of the gap's middle
-#define HERO_SWEEP_HZ 1.3f
+#define AIM_TURN    0.4f   // seconds a ship takes to bring its nose on / off its aim
+#define RAIDER_MISS 1.65f  // past the hero on the marauder's side: clear of its wingtips (half-span 1)
 
 // The climb from the pad, one point a second from lift-off.
 static vec3_t CLIMB_PTS[] = {
@@ -92,11 +94,9 @@ static float aim_weight(float t, float f0, float f1) {
     return smoothstep(f0 - AIM_TURN, f0, t) * (1.0f - smoothstep(f1, f1 + AIM_TURN, t));
 }
 
-// The hero's aim: the middle of the gap between the marauders, swinging
-// across it so the beams brush past each in turn.
+// The hero's aim: the green ship, then the yellow one.
 static vec3_t hero_aim(float t) {
-    vec3_t const mid = v3_scale(v3_add(raider_pos(0, t), raider_pos(1, t)), 0.5f);
-    return v3_add(mid, v3(HERO_SWEEP * sinf(6.2831853f * HERO_SWEEP_HZ * (t - HERO_FIRE0)), 0.0f, 0.0f));
+    return v3_lerp(raider_pos(0, t), raider_pos(1, t), smoothstep(HERO_SWAP0, HERO_SWAP1, t));
 }
 
 // Level on the pad; from T_PITCH0 the nose swings from dead ahead (+z)
@@ -147,13 +147,40 @@ static void submit_ray(xform_t const* pose, vec3_t gun, float t, float tf, laser
     }
 }
 
+// The ship the hero's nose is on for a shot fired at tf (0 green, 1
+// yellow), or -1 while it swings across: that shot is held.
+static int hero_target(float tf) {
+    if (tf < HERO_SWAP0) return 0;
+    if (tf > HERO_SWAP1) return 1;
+    return -1;
+}
+
+// Hero shot k's spot on ship `side`, in that ship's frame: where the
+// beam from the gun to the ship's middle enters the hull.
+static vec3_t hero_spot(int k, int side) {
+    float const   tf   = HERO_FIRE0 + (float)k * HERO_INTERVAL;
+    xform_t const hero = hero_pose(tf);
+    xform_t const ship = raider_pose(side, tf);
+    vec3_t const  gun  = player_ship_gun(&hero, k & 1);
+    vec3_t const  dir  = v3_norm(v3_sub(ship.pos, gun));
+    float         d    = v3_len(v3_sub(ship.pos, gun));
+    marauder_raycast(&ship, gun, dir, d, &d);
+    vec3_t const rel = v3_scale(v3_sub(v3_add(gun, v3_scale(dir, d)), ship.pos), 1.0f / ship.scale);
+    return v3(v3_dot(rel, ship.r.right), v3_dot(rel, ship.r.up), v3_dot(rel, ship.r.fwd));
+}
+
 static void submit_fire(float t) {
-    // The hero: both pods in turn, into the gap between the marauders.
-    for (float tf = HERO_FIRE0; tf <= HERO_FIRE1 && tf <= t; tf += HERO_INTERVAL) {
-        int const k = (int)lroundf((tf - HERO_FIRE0) / HERO_INTERVAL);
-        if (!laser_lit(t, tf, &LASER_STYLE_PLAYER)) continue;
+    // The hero: both pods in turn, onto the ship its nose is on; the
+    // sparks outlive the beam.
+    for (float tf = HERO_FIRE0; tf <= HERO_FIRE1 + 1e-3f && tf <= t; tf += HERO_INTERVAL) {
+        int const k    = (int)lroundf((tf - HERO_FIRE0) / HERO_INTERVAL);
+        int const side = hero_target(tf);
+        if (side < 0 || t - tf >= fmaxf(LASER_STYLE_PLAYER.duration, IMPACT_SECS)) continue;
         xform_t const hero = hero_pose(t);
-        submit_ray(&hero, player_ship_gun(&hero, k & 1), t, tf, &LASER_STYLE_PLAYER, 700u + (unsigned)k);
+        xform_t const ship = raider_pose(side, t);
+        vec3_t const  at   = xform_apply(&ship, hero_spot(k, side));
+        laser_submit_beam(player_ship_gun(&hero, k & 1), at, t, tf, &LASER_STYLE_PLAYER);
+        impact_submit(at, v3_sub(hero.pos, at), 1.2f, t, tf, 700u + (unsigned)k);
     }
     // The marauders: alternately, each just wide of the hero.
     for (float tf = RAIDER_FIRE0; tf <= RAIDER_FIRE1 && tf <= t; tf += RAIDER_INTERVAL) {
