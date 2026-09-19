@@ -43,21 +43,20 @@ static scene_def_t const* const ALL_SCENES[] = {
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
-// What plays, in order, looping. The space act is commented out while
-// CraftMiner is being made, so it can be checked on its own
-// (claudeplans/craftminer.md, D-44); in the end CraftMiner follows it.
+// What plays, in order, looping: the space act, then CraftMiner
+// (claudeplans/craftminer.md, D-44).
 static scene_def_t const* const PLAYLIST[] = {
-    // &SCENE_TITLE,
-    // &SCENE_PLANET_LANDING,
-    // &SCENE_MARAUDER_APPROACH,
-    // &SCENE_PAD_STRAFE,
-    // &SCENE_EMERGENCY_TAKEOFF,
-    // &SCENE_MARAUDER_PURSUIT,
-    // &SCENE_SPACESTATION_FLYBY,
-    // &SCENE_WARP_OUT,
-    // &SCENE_ASTEROID_AMBUSH,
-    // &SCENE_MARAUDER_DOWNFALL,
-    // &SCENE_HERO_ROLLS,
+    &SCENE_TITLE,
+    &SCENE_PLANET_LANDING,
+    &SCENE_MARAUDER_APPROACH,
+    &SCENE_PAD_STRAFE,
+    &SCENE_EMERGENCY_TAKEOFF,
+    &SCENE_MARAUDER_PURSUIT,
+    &SCENE_SPACESTATION_FLYBY,
+    &SCENE_WARP_OUT,
+    &SCENE_ASTEROID_AMBUSH,
+    &SCENE_MARAUDER_DOWNFALL,
+    &SCENE_HERO_ROLLS,
     &SCENE_CM_TITLE,
     &SCENE_CM_OVERWORLD,
     &SCENE_CM_WALK,
