@@ -15,3 +15,8 @@ vec3_t camera_eye(void) {
     render_camera_t const c = render_camera();
     return v3(c.x, c.y, c.z);
 }
+
+mat3_t camera_basis(void) {
+    render_camera_t const c = render_camera();
+    return mat3_from_ypr(c.yaw, c.pitch, c.roll);
+}

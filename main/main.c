@@ -51,6 +51,19 @@ static char const TAG[] = "showreel";
 
 static bool s_shot_pending = false;  // P pressed; capture at end of frame
 
+// Quarter resolution (scene_def_t.quarter): the scene renders into this
+// half-size buffer (backdrop and 3D alike), which the PPA then scales up
+// 2x onto the screen. Allocated once; if that fails, every scene renders
+// at full resolution.
+static se_ppa_layer_t s_quarter_buf;
+static bool           s_quarter;  // this frame renders into s_quarter_buf
+#define JOB_UPSCALE 2u            // PPA job id (the backdrop's fills are 0 and 1)
+
+// Where this frame's scene draws: the screen, or the half-size buffer.
+static pax_buf_t* frame_target(pax_buf_t* fb) {
+    return s_quarter ? &s_quarter_buf.buf : fb;
+}
+
 // Once-a-second profiling, two lines, in the same shape as Stunt Racer's:
 //
 //   the phase split  -- per-frame ms for each prof_phase_t, the
@@ -150,6 +163,11 @@ static void on_init(void* user) {
     // the engine's pump task). A failure is logged and degrades to
     // painting the backdrop on the CPU -- slower, never a blank screen.
     backdrop_init();
+    se_display_info_t di;
+    se_display_info(&di);
+    if (!se_ppa_layer_alloc(&s_quarter_buf, DISPLAY_LOG_W / 2, DISPLAY_LOG_H / 2, di.pax_format, di.reversed,
+                            di.orientation))
+        ESP_LOGW(TAG, "no quarter-resolution buffer: every scene renders at full resolution");
 
     // Every scene and its assets (textures from wherever graceloader
     // started us: the SD card install, /sd/apps/at.cavac.showreel). After
@@ -172,8 +190,8 @@ static void on_init(void* user) {
     // Output-neutral scene passes (both default OFF; see se_scene.h).
     // Frustum cull is a near-pure win. depth_order is an overdraw-
     // dependent trade-off: one hull filling the screen is light
-    // overdraw, which is the case it can lose on, so it stays off until
-    // the reel has a scene dense enough to measure it against.
+    // overdraw, which is the case it can lose on, so each scene chooses
+    // it (scene_def_t.depth_order; reel.c sets it on entering a scene).
     scene_set_options(&(se_scene_options_t){
         .frustum_cull = true,
         .depth_order  = false,
@@ -231,12 +249,16 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
     reel_camera();
     prof_end(PROF_SUBMIT);
 
+    s_quarter = reel_quarter() && s_quarter_buf.pixels != NULL;
+    scene_set_render_scale(s_quarter ? 2 : 1);
+    pax_buf_t* const target = frame_target(fb);
+
     prof_begin(PROF_FILL);
-    backdrop_begin(fb, reel_backdrop());
+    backdrop_begin(target, reel_backdrop());
     prof_end(PROF_FILL);
 
     prof_begin(PROF_SUBMIT);
-    scene_begin(fb);
+    scene_begin(target);
     reel_submit();
     prof_end(PROF_SUBMIT);
 
@@ -252,8 +274,10 @@ static void on_backdrop(pax_buf_t* fb, void* user) {
 static void on_render(pax_buf_t* fb, void* user) {
     (void)user;
 
+    pax_buf_t* const target = frame_target(fb);
+
     prof_begin(PROF_WAIT);
-    backdrop_finish(fb);
+    backdrop_finish(target);
     prof_end(PROF_WAIT);
 
     prof_begin(PROF_RASTER);
@@ -261,6 +285,23 @@ static void on_render(pax_buf_t* fb, void* user) {
     scene_rasterize(RENDER_MODE);
     int64_t const rast_us = esp_timer_get_time() - rast_t0;
     prof_end(PROF_RASTER);
+
+    // Quarter resolution: the frame into PSRAM (and out of the cache, so
+    // the next frame's fill is not overwritten by stale lines), the PPA
+    // scales it 2x onto the screen, and the screen out of the cache, so a
+    // screenshot or the video encoder reads what the PPA wrote. Counted
+    // as "wait": the CPU waits for the hardware.
+    if (s_quarter) {
+        prof_begin(PROF_WAIT);
+        se_ppa_layer_sync(&s_quarter_buf);
+        if (se_ppa_blit_scaled(fb, JOB_UPSCALE, &s_quarter_buf, 2)) {
+            se_ppa_wait_job(JOB_UPSCALE);
+            se_ppa_buf_invalidate(fb);
+        } else {
+            ESP_LOGE(TAG, "quarter-resolution upscale refused");
+        }
+        prof_end(PROF_WAIT);
+    }
 
     // Last thing in the frame, so the capture is of the finished image.
     // It blocks for as long as the SD write takes (about a second). That

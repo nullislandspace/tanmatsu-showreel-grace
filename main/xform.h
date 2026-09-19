@@ -105,6 +105,12 @@ static inline vec3_t xform_apply(xform_t const* x, vec3_t p) {
     return v3_add(x->pos, mat3_apply(&x->r, v3_scale(p, x->scale)));
 }
 
+// a after b: xform_apply(result, p) == xform_apply(a, xform_apply(b, p)).
+// For posing a part in its parent's frame (a limb on a body).
+static inline xform_t xform_mul(xform_t const* a, xform_t const* b) {
+    return (xform_t){mat3_mul(&a->r, &b->r), xform_apply(a, b->pos), a->scale * b->scale};
+}
+
 // Camera angles that look from `eye` towards `target`, for
 // render_set_camera_6dof() (roll is passed through unchanged).
 void look_at_angles(vec3_t eye, vec3_t target, float* yaw, float* pitch);

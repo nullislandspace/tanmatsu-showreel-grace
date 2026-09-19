@@ -43,4 +43,14 @@ typedef struct {
     // Optional: a backdrop that changes during the scene (e.g. per shot);
     // when set it is used instead of `backdrop`.
     backdrop_t const* (*backdrop_at)(double t);
+    // Sort the triangles nearest first (the engine's depth_order pass):
+    // a hidden pixel then fails the depth test before any texture work.
+    // Worth its sort for scenes with heavy overdraw (a block world);
+    // off, the default, for the rest.
+    bool depth_order;
+    // Render at quarter resolution (scene_set_render_scale): every other
+    // pixel of every other line, scaled back up 2x by the PPA -- a
+    // quarter of the fill work, and chunky pixels. The camera, the
+    // projection and everything else stay the same.
+    bool quarter;
 } scene_def_t;

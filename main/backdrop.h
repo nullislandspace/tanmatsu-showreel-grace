@@ -37,7 +37,9 @@ typedef struct {
 void backdrop_init(void);
 
 // After the frame's camera is set, before submitting geometry: queue the
-// PPA fills for `bd` (NULL = black).
+// PPA fills for `bd` (NULL = black). `fb` is the screen, or the
+// half-size buffer of a quarter-resolution frame (scene_set_render_scale):
+// the horizon is worked out in screen coordinates and scaled to it.
 void backdrop_begin(pax_buf_t* fb, backdrop_t const* bd);
 
 // Before anything writes the framebuffer: wait for the fills, then paint

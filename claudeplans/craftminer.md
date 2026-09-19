@@ -71,6 +71,23 @@ textures/craftminer/*.png the block and face textures
   - Before it, `make testcompare` runs over every reference (turntable, marauder_pursuit, spacestation_flyby). Any reference made stale by the D-39 fixes is re-captured with a reason.
   - After it, the same comparisons must give **identical** hashes. The `make scenecheck` report must be unchanged, and `make meshcheck` must pass.
 
+## Part X: cut-out transparency in the engine (D-48)
+The user asked for cut-out transparency: a texel is either drawn or a hole. It reverses D-3 for that kind; blended transparency stays out. The work is engine work on branch V2.0, still unreleased: no version bump, and it goes into the 2.0 CHANGELOG entry.
+
+- **Texture loader (`se_texture.c`):** the PNG's alpha is no longer discarded. A texel with alpha < 128 becomes the reserved key `SE_TEXEL_CUTOUT` (0xF81F, RGB565 magenta). An opaque texel that happens to equal the key is nudged by one blue step. `se_texture_t` gains `bool cutout`, true when the texture has any hole. `mean_argb` averages only the opaque texels.
+- **Textured rasterizer (`se_scene.c`):** a sibling of `scene_vrun_tex` for cutout textures. It fetches the texel first, and a hole writes neither colour nor depth. Opaque textures keep the existing loop untouched, so their output stays bit-identical. The raycast renderer draws textured triangles through the same pass, so both built-in renderers get it; custom renderers see `tex->cutout`.
+- **Docs:** `se_texture.h`, `docs/renderer.md` and `README.md` stop saying "alpha discarded", and the CHANGELOG 2.0 entry gets the addition.
+- **Checked by:** every reference shot identical (opaque path unchanged), and device shots of cutout leaves in the CraftMiner world test scene.
+- **CraftMiner uses it for** leaves with gaps (near trees get their inner faces too), flowers and grass tufts as crossed quads, torches, and glass in the cabin windows.
+
+## Part Q: quarter-resolution rendering in the engine (D-49)
+The block world is fill-bound at 800×480 (F-37). The user asked for rendering every other pixel of every other line into a half-size buffer, scaled back up by the PPA, switchable per scene. Engine work on V2.0 (unreleased, 2.0 CHANGELOG entry).
+
+- **Engine (`se_scene.c`):** `scene_set_render_scale(1|2)`, latched by `scene_begin()`. The projection's output is halved (one place, `scene_project_cam`), so target pixel (i, j) is what full resolution draws at (2i, 2j); the camera, the `RENDER_*` projection, the viewport (kept in full-screen pixels, halved per frame), culling, clipping and lighting are unchanged. The rasterizers address the target through one helper with the frame's stride. The raycast renderer falls back to the z-buffer at quarter resolution. `se_geometry_t.scale`.
+- **Engine (`se_ppa.c`):** `se_ppa_blit_scaled` (the 2× upscale), `se_ppa_layer_sync` (write back and invalidate a buffer the CPU draws and the PPA fills and reads), `se_ppa_buf_invalidate` (before the CPU reads what the PPA wrote).
+- **App:** `scene_def_t.quarter`; `main.c` renders backdrop and scene into a half-size PPA layer, syncs it, has the PPA scale it 2× onto the screen and invalidates the screen for screenshots and the encoder; `backdrop.c` works in either buffer (the horizon scaled).
+- **The PPA's scaler interpolates** (F-39): soft pixels, not blocks. A CPU nearest-neighbour doubling was the alternative; the user looked at the soft result on the badge and kept it ("looks fine"; the PPA costs the CPU nothing).
+
 ## Part V: the voxel world (`main/craftminer/voxel/`)
 
 **`voxel_world.c/.h`: the block grid**
@@ -195,27 +212,37 @@ Each scene is its own file in `main/craftminer/scenes/`, declared in `craftminer
 | R.2 | Move: `git mv` code into `main/{common,dev,space}/`, textures into `textures/space/`; split `scenes.h`; fix includes, `texcache_get` paths, `CMakeLists.txt`, Makefile (install/apprepo/TEXTURES, scenecheck/meshcheck sources), `metadata.json`, `make_textures.py` output dirs | done | 2026-09-19: `scenes.h` → `space/space.h` + `dev/dev.h`; `main/objects/` → `space/objects/`; Makefile `SEGMENTS := space` drives TEXTURES, install/apprepo subdirectories and the scenecheck sources; `make textures` regenerates the 16 PNGs byte-identical. Only `texcache` in `common/` so far (F-35). |
 | R.3 | `tools/segcheck.py` in `make build`; its own self-test (a planted cross-segment include must fail) | done | 2026-09-19: rules: cross-segment includes, core including a segment (except `reel.c`), `dev/` includes, `../` includes, texture names outside the segment's directory. Self-test plants seven violations plus a clean tree (`make segcheck`). |
 | R.4 | Verify: build clean; meshcheck; scenecheck report unchanged; install (subdirectories, old flat textures deleted once); `testcompare` identical to R.1; README layout section | done | 2026-09-19: live and export builds clean; meshcheck and scenecheck reports unchanged; installed into `<app>/space/`, the 16 flat copies deleted; all 11 reference shots identical, so the textures load from the subdirectory. README: layout, `make segcheck`. `make format` now skips `third_party/` and `space/objects/` (F-35). |
-| R.5 | Comment the space scenes out of `PLAYLIST` (D-44) | todo | Waits for the first CraftMiner scene (3.1): an empty playlist would leave the reel nothing to play. |
+| R.5 | Comment the space scenes out of `PLAYLIST` (D-44) | done | 2026-09-19, with the six CraftMiner scenes in. |
+| **X** | **Cut-out transparency in the engine (Part X, D-48)** | | |
+| X.1 | Loader: alpha → `SE_TEXEL_CUTOUT`, `cutout` flag, opaque-only mean | done | 2026-09-19: the log line marks cut-out textures (", cut-out"). |
+| X.2 | Rasterizer: cutout sibling of the textured span loop | done | 2026-09-19: `scene_vrun_tex_cutout`, chosen per triangle; the raycast renderer uses the same pass. |
+| X.3 | Docs, README, CHANGELOG 2.0 | done | 2026-09-19 |
+| X.4 | Verify: every reference identical; cutout device shots (with 1.5) | done | 2026-09-19: all 11 reference shots identical; cm_world_test's tree shot shows the canopy's gaps (sky and inner leaves through them). |
+| **Q** | **Quarter-resolution rendering (Part Q, D-49)** | | |
+| Q.1 | Engine: render scale, projection halving, target indexing, viewport, raycast fallback | done | 2026-09-19 |
+| Q.2 | Engine: `se_ppa_blit_scaled`, `se_ppa_layer_sync`, `se_ppa_buf_invalidate`; docs, CHANGELOG | done | 2026-09-19 |
+| Q.3 | App: `scene_def_t.quarter`, half-size layer, upscale, scale-aware backdrop | done | 2026-09-19 |
+| Q.4 | Verify: every reference identical at scale 1; quarter frames correct; perf | done | 2026-09-19: all 11 references identical; the quarter frame matches the full one in content and horizon (the upscale's interpolation rules out a per-pixel comparison of the screen); perf F-39. |
 | **1** | **The voxel world** | | |
-| 1.1 | Block textures and the face texture (`make_textures.py`, `rng4`); contact sheet review; `metadata.json`; `TEXCACHE_MAX` 48 | todo | |
-| 1.2 | `voxel_world`: grid, generation, edit timeline, `voxel_height` | todo | |
-| 1.3 | `voxel_mesh`: exposed faces, greedy merge, grass-side rule; meshcheck cases | todo | |
-| 1.4 | `voxel_render`: chunks, near-textured / far-flat with fog tint, view culling, memoised remesh | todo | |
-| 1.5 | Dev scene `cm_world_test` (not in the playlist): orbit and walk-through shots → device shots and `perf`, to set the textured radius, draw distance and cap before any scene is built | todo | |
+| 1.1 | Block textures and the face texture (`make_textures.py`, `rng4`); contact sheet review; `metadata.json`; `TEXCACHE_MAX` 48 | done | 2026-09-19: 20 textures (16×16; a seed per texture, not a shared stream); cut-out ones (leaves, flowers, tall grass, glass) saved as RGBA; opaque `leaves_fast` for canopies further off. |
+| 1.2 | `voxel_world`: grid, generation, edit timeline, `voxel_height` | done | 2026-09-19: plus plants, `voxel_ground`/`voxel_solid`, `voxel_column`. |
+| 1.3 | `voxel_mesh`: exposed faces, greedy merge, grass-side rule; meshcheck cases | done | 2026-09-19: reads a dense grid (chunk + border); fancy/fast modes; half-resolution cells; skirts. 11 meshcheck cases (volume = cells, area = exposed faces, counts). |
+| 1.4 | `voxel_render`: chunks, near-textured / far-flat with fog tint, view culling, memoised remesh | done | 2026-09-19: three meshes per chunk (fancy, fast, coarse), built on first use; fog on the flat ones (F-36). |
+| 1.5 | Dev scene `cm_world_test` (not in the playlist): orbit and walk-through shots → device shots and `perf`, to set the textured radius, draw distance and cap before any scene is built | done | 2026-09-19: lists within the caps without raising any (F-36); 4.3–11.7 fps live (F-37). |
 | **2** | **Assets** | | |
-| 2.1 | `miner` (parts, walk, swing), `pickaxe`, first-person arm; meshcheck | todo | |
-| 2.2 | `voxel_fx` (outline, cracks, particles, item, pop) and `voxel_sky` (sun, moon, clouds) | todo | |
+| 2.1 | `miner` (parts, walk, swing), `pickaxe`, first-person arm; meshcheck | done | 2026-09-19: `miner_mesh.c` (head with a textured face, hat, brim, lamp; body; arm; leg; pickaxe; all closed, meshcheck) and `miner.c` (pose as a pure function; `miner_stroke`; first-person arm at 0.75 scale). `xform_mul` in the core. |
+| 2.2 | `voxel_fx` (outline, cracks, particles, item, pop) and `voxel_sky` (sun, moon, clouds) | done | 2026-09-19: plus the torch flame; a shared block cube (`voxel_build_cube`, meshcheck); `starfield` moved to `common/` with `starfield_submit_above` (no stars on the ground beyond the draw distance); `flame` stays in `space/` (the torch uses its own). Device shots of cm_world_test's props and first-person shots reviewed. |
 | **3** | **Scenes** (each: build, scenecheck, device shots at key instants → review → tune; `perf` per shot) | | |
-| 3.1 | `cm_title` | todo | |
-| 3.2 | `cm_overworld` | todo | |
-| 3.3 | `cm_walk` | todo | |
-| 3.4 | `cm_mining` | todo | |
-| 3.5 | `cm_building` | todo | |
-| 3.6 | `cm_nightfall` | todo | |
+| 3.1 | `cm_title` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
+| 3.2 | `cm_overworld` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
+| 3.3 | `cm_walk` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
+| 3.4 | `cm_mining` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
+| 3.5 | `cm_building` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
+| 3.6 | `cm_nightfall` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
 | **4** | **Wrap-up** | | |
 | 4.1 | Perf section in `devdocs/performance.md`; decide on the textured cap | todo | |
 | 4.2 | README (CraftMiner scenes); MJPEG export of the CraftMiner playlist for the user's review | todo | |
-| 4.3 | Commit and push: **only when the user asks** | todo | |
+| 4.3 | Commit and push: **only when the user asks** | done | 2026-09-19: engine (V2.0) and showreel committed and pushed; `craftminer` merged into `main` and pushed (D-52). The playlist on `main` plays CraftMiner only until D-44's final order (space act first) is restored. |
 
 ## Part E: findings and decisions log
 
@@ -235,6 +262,39 @@ Each scene is its own file in `main/craftminer/scenes/`, declared in `craftminer
   - `flame.c` hard-codes the space act's flame textures (`space/flame.png`, `space/flame_red.png`), so it cannot be shared as-is; it moves to `common/` with its texture as a parameter when CraftMiner needs it.
   - The launcher creates asset subdirectories on install (`fs_utils_mkdir_recursive`, `tanmatsu-launcher/main/app_management.c:217`); other apps in the app repository ship assets in subdirectories.
 
+- **F-36** 2026-09-19, the first world test (scenecheck): all chunks meshed full-detail overflowed both lists (4746 flat, 2181 textured). Leaves were 58% of the near triangles (the insides of see-through canopies), plants 15%. Levels of detail brought it to ≤ 2262 flat and ≤ 910 textured, with no cap raised:
+  - see-through canopies and plants only within 8 blocks (fancy mesh);
+  - textured with opaque "fast" leaves within 18 (fast mesh);
+  - flat colours with fog to 36, half resolution (2×2×2 blocks a cell) to 64 (coarse mesh, with skirts where it meets full resolution, coloured like the ground; without them the sky showed through the step);
+  - fewer trees (38% of candidate spots) and plants (3–6% of grass).
+  Meshing all four levels of all 64 chunks at start took 4.6 s on the badge and pushed app start past the test runner's 12 s connect budget. With the mesher reading a dense copy of each chunk and only the height band that can have faces, the fast and far levels sharing one mesh, and the rest built on first use, world start-up is 0.3 s.
+- **F-37** 2026-09-19, `perf scene=cm_world_test`: overview 10.4 fps (flat pass ~65 ms: 1400 flat triangles, the whole screen of terrain with hills behind hills), walk 6.3 fps (textured ~95 ms + flat ~45 ms), tree 5.4 fps (the camera under a canopy: textured ~175 ms). The block world is fill-bound at 800×480 on both paths. Front-to-back sorting (`depth_order`) cut the canopy shot from 220 to 175 ms and cost the overview a little, so it is a per-scene choice (`scene_def_t.depth_order`, off for the space scenes). Faster would need engine work: rendering the 3D at half resolution and scaling it up (which suits the blocky look), or a faster raster loop. To offer the user, not done (D-15).
+
+- **F-38** 2026-09-19, z-buffer vs raycast renderer, same build, `perf` per shot (rast mean in ms; asked by the user):
+
+  | scene / shot | z-buffer | raycast |
+  |---|---:|---:|
+  | cm_world_test overview (1430 flat, 100 textured tris) | 76 | 391 |
+  | cm_world_test walk (1490 flat, 150 textured) | 138 | 346 |
+  | cm_world_test tree (60 flat, 100 textured) | 174 | 180 |
+  | marauder_pursuit | 18 | 23 |
+  | spacestation_flyby establish / chase / exit / reverse | 4.3 / 25 / 10 / 11 | 9.0 / 29 / 16 / 22 |
+
+  The z-buffer wins everywhere; the raycaster only replaces the flat pass (textured triangles go through the same textured pass in both), so where the frame is textured (the tree) they tie. On the block world's flat terrain the raycaster is 2.5–5× slower: big, overlapping triangles bin into many tiles, and each pixel of a tile tests every triangle binned there. The reel stays on the z-buffer.
+
+- **F-39** 2026-09-19, quarter resolution on the badge (`cm_world_test`, PPA upscale):
+
+  | shot | fps full → quarter | rast ms full → quarter |
+  |---|---:|---:|
+  | overview | 10.4 → 20.6 | 76 → 24 |
+  | walk | 6.3 → 15.5 | 138 → 40 |
+  | tree | 5.4 → 15.6 | 174 → 46 |
+
+  Rasterizing drops to about a third (not a quarter: per-triangle setup does not shrink). `wait` is 6.5 ms per frame: the PPA fills, the layer sync and the 2× upscale, waited for. What now limits the frame is the CPU before rasterizing: submit about 14–16 ms (mesh_submit transforms every chunk vertex, though the chunks are already in world coordinates) and prepare about 4 ms (sorting). The PPA's scaler interpolates: in the upscaled frame only 41% of the 2×2 blocks are one colour, and intermediate shades appear between texels; the driver has no filter setting.
+
+- **F-40** 2026-09-19, scenecheck of the six scenes (peak entries per frame, flat / textured): title 2194 / 1785 (letters kept textured, F-41), overworld 3160 / 1244, walk 2679 / 1179, mining 2254 / 675, building 2524 / 1257, nightfall 2518 / 1143. Four scenes need more than the engine's default 1024 textured triangles, all well under 2048; the flat list stays under 4096.
+- **F-41** 2026-09-19, the title: its letters are about 36 blocks from the camera, beyond the textured range, so they came out in flat colours; textured to 44 blocks, the frame needed 2878 textured triangles. A box in the view (`vox_view_t.tex_box`) keeps just the letters' chunks textured instead: 1785. The first camera path also ran through a hill (scenecheck: a chunk through the near plane); it is now lifted clear of the ground along the whole path, worked out at init.
+
 ### Decisions (D-n), each with date and who decided
 - **D-40** 2026-09-19, user: the eleven space scenes are complete. New work goes on branch `craftminer`.
 - **D-41** 2026-09-19, user: a few scenes of a simplified Minecraft-like world: a typical overworld, a person walking around, mining blocks, building a simple log cabin. The title reads "CraftMiner", to stay clear of copyright. Claude adds: all textures generated by us, our own character design, no mobs.
@@ -244,6 +304,11 @@ Each scene is its own file in `main/craftminer/scenes/`, declared in `craftminer
 - **D-45** 2026-09-19, user: `SE_SCENE_TEXTURED_TRI_CAP` may be raised (e.g. to 2048) through the app build, if a measured view needs it.
 - **D-46** 2026-09-19, user: the plan lives in `claudeplans/` of this repo, so it is under source control.
 - **D-47** 2026-09-19, user: the existing space assets, scenes and textures move into a subdirectory, so each showreel segment has its own and nothing is mixed between segments by accident. Claude's layout is Part R: shared code sits in `main/common/` on purpose, textures go into per-segment subdirectories on the badge too, and `tools/segcheck.py` enforces the separation in `make build`. This is done first (steps R.1–R.5), before any CraftMiner code.
+- **D-48** 2026-09-19, user: add cut-out transparency to the engine (Part X), then continue with CraftMiner. Claude had estimated it on request: cut-out is about 100–150 lines, costs nothing for opaque textures and is low-risk; blended transparency would be 1–2 days, z-buffer only, with +30–50% per translucent pixel. This reverses D-3 for cut-out only.
+- **D-49** 2026-09-19, user: add quarter-resolution rendering, switchable per scene: every other pixel of every other line into a smaller buffer, upscaled by the PPA (Part Q). Then continue with CraftMiner. After seeing it on the badge, the user kept the PPA's soft upscale ("looks fine"; much faster than a CPU upscale) and declined the CPU nearest-neighbour variant.
+- **D-50** 2026-09-19, Claude: per-scene engine options in `scene_def_t` -- `depth_order` (front-to-back sorting; F-37) and `quarter` (D-49), both off for the space scenes, whose references are unchanged.
+- **D-51** 2026-09-19, Claude, under D-45 (measured: F-40): `SE_SCENE_TEXTURED_TRI_CAP` = 2048 for the app build (CMakeLists.txt, before the engine is added; the Makefile passes the same to scenecheck). About 70 KB more PSRAM (the list does not fit internal SRAM); no per-frame cost.
+- **D-52** 2026-09-19, user: after watching the six scenes live on the badge, "scenes look fine": commit and push the engine and the app, merge `craftminer` into `main`, push everything. Still open: the per-shot perf section (4.1), the README and a video export (4.2), and D-44's final order (the space act back in the playlist, CraftMiner after it).
 
 ## Verification
 - **Host:** `make meshcheck` (the new meshes and mesher cases) and `make scenecheck` (all scenes, the new ones included; no cap overruns; near and contact rules).

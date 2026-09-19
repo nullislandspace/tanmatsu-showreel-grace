@@ -15,3 +15,8 @@ void camera_look_at(vec3_t eye, vec3_t target, float roll);
 
 // The current camera's eye position (for back-face culling).
 vec3_t camera_eye(void);
+
+// The current camera's orientation: its right, up and forward axes in
+// world space (mat3_t columns), e.g. for culling whole objects against
+// the view before submitting them.
+mat3_t camera_basis(void);

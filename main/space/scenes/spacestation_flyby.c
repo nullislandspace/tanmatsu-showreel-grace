@@ -26,11 +26,11 @@
 
 #include <math.h>
 #include "camera.h"
+#include "common/starfield.h"
 #include "space/assets/explosion.h"
 #include "space/assets/laser.h"
 #include "space/assets/marauder.h"
 #include "space/assets/player_ship.h"
-#include "space/assets/starfield.h"
 #include "space/assets/station.h"
 #include "space/space.h"
 #include "synthengine3d.h"

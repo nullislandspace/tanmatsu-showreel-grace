@@ -2,7 +2,7 @@
 //  Showreel asset  --  starfield (see starfield.h)
 // =====================================================================
 
-#include "space/assets/starfield.h"
+#include "common/starfield.h"
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -81,6 +81,16 @@ void starfield_submit_turned(mat3_t const* turn) {
     vec3_t const eye = camera_eye();
     for (int i = 0; i < STAR_COUNT; i++) {
         vec3_t const p = v3_add(eye, v3_scale(mat3_apply(turn, s_stars[i].dir), STAR_DIST));
+        scene_point(p.x, p.y, p.z, s_stars[i].argb);
+    }
+}
+
+void starfield_submit_above(float min_y) {
+    if (!s_ready) return;
+    vec3_t const eye = camera_eye();
+    for (int i = 0; i < STAR_COUNT; i++) {
+        if (s_stars[i].dir.y < min_y) continue;
+        vec3_t const p = v3_add(eye, v3_scale(s_stars[i].dir, STAR_DIST));
         scene_point(p.x, p.y, p.z, s_stars[i].argb);
     }
 }

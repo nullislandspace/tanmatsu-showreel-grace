@@ -10,9 +10,9 @@
 
 #include <math.h>
 #include "camera.h"
+#include "common/starfield.h"
 #include "space/assets/marauder.h"
 #include "space/assets/planet.h"
-#include "space/assets/starfield.h"
 #include "space/scenes/formation.h"
 #include "space/space.h"
 #include "synthengine3d.h"

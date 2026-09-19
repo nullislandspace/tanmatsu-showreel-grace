@@ -10,6 +10,7 @@
 
 #include <math.h>
 #include "camera.h"
+#include "common/starfield.h"
 #include "space/assets/asteroid.h"
 #include "space/assets/explosion.h"
 #include "space/assets/laser.h"
@@ -18,7 +19,6 @@
 #include "space/assets/planet_base.h"
 #include "space/assets/player_ship.h"
 #include "space/assets/space_dust.h"
-#include "space/assets/starfield.h"
 #include "space/assets/station.h"
 #include "space/assets/title_text.h"
 #include "space/assets/title_text_mesh.h"

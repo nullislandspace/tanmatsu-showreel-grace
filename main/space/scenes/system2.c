@@ -4,8 +4,8 @@
 
 #include "space/scenes/system2.h"
 #include "camera.h"
+#include "common/starfield.h"
 #include "space/assets/planet.h"
-#include "space/assets/starfield.h"
 #include "synthengine3d.h"
 
 // The giant: far enough that the few hundred units a scene covers barely

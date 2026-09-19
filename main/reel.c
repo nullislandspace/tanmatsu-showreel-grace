@@ -6,10 +6,12 @@
 #include <stddef.h>
 #include <string.h>
 #include "common/texcache.h"
+#include "craftminer/craftminer.h"
 #include "dev/dev.h"
 #include "esp_log.h"
 #include "showtime.h"
 #include "space/space.h"
+#include "synthengine3d.h"
 
 static char const TAG[] = "reel";
 
@@ -31,22 +33,37 @@ static scene_def_t const* const ALL_SCENES[] = {
     &SCENE_TURNTABLE,
     &SCENE_ASSET_VIEWER,
     &SCENE_HORIZON_TEST,
+    &SCENE_CM_TITLE,
+    &SCENE_CM_OVERWORLD,
+    &SCENE_CM_WALK,
+    &SCENE_CM_MINING,
+    &SCENE_CM_BUILDING,
+    &SCENE_CM_NIGHTFALL,
+    &SCENE_CM_WORLD_TEST,
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
-// What plays, in order, looping.
+// What plays, in order, looping. The space act is commented out while
+// CraftMiner is being made, so it can be checked on its own
+// (claudeplans/craftminer.md, D-44); in the end CraftMiner follows it.
 static scene_def_t const* const PLAYLIST[] = {
-    &SCENE_TITLE,
-    &SCENE_PLANET_LANDING,
-    &SCENE_MARAUDER_APPROACH,
-    &SCENE_PAD_STRAFE,
-    &SCENE_EMERGENCY_TAKEOFF,
-    &SCENE_MARAUDER_PURSUIT,
-    &SCENE_SPACESTATION_FLYBY,
-    &SCENE_WARP_OUT,
-    &SCENE_ASTEROID_AMBUSH,
-    &SCENE_MARAUDER_DOWNFALL,
-    &SCENE_HERO_ROLLS,
+    // &SCENE_TITLE,
+    // &SCENE_PLANET_LANDING,
+    // &SCENE_MARAUDER_APPROACH,
+    // &SCENE_PAD_STRAFE,
+    // &SCENE_EMERGENCY_TAKEOFF,
+    // &SCENE_MARAUDER_PURSUIT,
+    // &SCENE_SPACESTATION_FLYBY,
+    // &SCENE_WARP_OUT,
+    // &SCENE_ASTEROID_AMBUSH,
+    // &SCENE_MARAUDER_DOWNFALL,
+    // &SCENE_HERO_ROLLS,
+    &SCENE_CM_TITLE,
+    &SCENE_CM_OVERWORLD,
+    &SCENE_CM_WALK,
+    &SCENE_CM_MINING,
+    &SCENE_CM_BUILDING,
+    &SCENE_CM_NIGHTFALL,
 };
 // clang-format on
 #define PLAY_N (sizeof(PLAYLIST) / sizeof(PLAYLIST[0]))
@@ -58,8 +75,11 @@ static bool               s_hold;
 static int                s_cycles;
 
 static void enter(scene_def_t const* sc) {
-    s_cur   = sc;
-    s_start = showtime_now();
+    s_cur                   = sc;
+    s_start                 = showtime_now();
+    se_scene_options_t opts = scene_get_options();
+    opts.depth_order        = sc->depth_order;
+    scene_set_options(&opts);
     if (sc->enter) sc->enter();
     ESP_LOGI(TAG, "scene: %s", sc->name);
 }
@@ -119,6 +139,10 @@ void reel_camera(void) {
 backdrop_t const* reel_backdrop(void) {
     if (s_cur->backdrop_at) return s_cur->backdrop_at(reel_scene_time());
     return &s_cur->backdrop;
+}
+
+bool reel_quarter(void) {
+    return s_cur->quarter;
 }
 
 void reel_submit(void) {

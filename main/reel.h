@@ -25,6 +25,8 @@ void              reel_frame(void);
 void              reel_camera(void);
 // The current scene's backdrop.
 backdrop_t const* reel_backdrop(void);
+// Whether the current scene renders at quarter resolution.
+bool              reel_quarter(void);
 // Draw the current scene at the current show time (camera already set).
 void              reel_submit(void);
 

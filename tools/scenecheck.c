@@ -18,7 +18,10 @@
 //                 peak per shot. Over a cap fails, over 90% warns.
 //    clearances   the closest approach between every two mesh objects
 //                 (vertex-to-triangle, both ways). Touching (< CONTACT)
-//                 fails unless the scene allows that pair.
+//                 fails unless the scene allows that pair. Two pieces
+//                 of one static terrain (the chunks of a block world,
+//                 the scene's `terrain`) are not measured: they touch
+//                 by design.
 //    framing      each object's largest on-screen extent per shot.
 //    beams        every laser beam (a line in LASER_RED / LASER_BLUE)
 //                 must end on something -- a hull (within BEAM_ON_HULL),
@@ -55,6 +58,7 @@
 #include "space/assets/laser.h"
 #include "horizon.h"
 #include "mesh_render.h"
+#include "craftminer/craftminer.h"
 #include "dev/dev.h"
 #include "space/space.h"
 #include "synthengine3d.h"
@@ -77,41 +81,63 @@ typedef struct {
     char const*        contact_ok;   // object pairs allowed to touch, "a-b,c-d" (globs)
     char const*        why;          // why those are allowed
     bool               loose_beams;  // beams may end in mid-air (a viewer firing at nothing)
+    char const*        terrain;      // pieces of one static terrain, "a,b" (globs): no clearance between two
 } check_t;
 
 static check_t const CHECKS[] = {
-    {&SCENE_TITLE, 0.0f, NULL, NULL, NULL, false},
-    {&SCENE_MARAUDER_APPROACH, 0.0f, NULL, NULL, NULL, false},
+    {&SCENE_TITLE, 0.0f, NULL, NULL, NULL, false, NULL},
+    {&SCENE_MARAUDER_APPROACH, 0.0f, NULL, NULL, NULL, false, NULL},
     {&SCENE_PAD_STRAFE, 0.0f, NULL, "apron*-base*,player_ship*-base*",
-     "the base stands on the apron; the hero sits on the pad", false},
+     "the base stands on the apron; the hero sits on the pad", false, NULL},
     {&SCENE_EMERGENCY_TAKEOFF, 0.0f, NULL, "apron*-base*,player_ship*-base*",
-     "the base stands on the apron; the hero starts on the pad", false},
+     "the base stands on the apron; the hero starts on the pad", false, NULL},
     {&SCENE_PLANET_LANDING, 0.0f, NULL, "apron*-base*,player_ship*-base*",
-     "the base stands on the apron; the ship lands on the pad (part of the base)", false},
-    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL, false},
+     "the base stands on the apron; the ship lands on the pad (part of the base)", false, NULL},
+    {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL, false, NULL},
     {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, "player_ship*-fireball*,fireball*-fireball*",
-     "the hits' bursts go off on the player's hull; a fireball's core sits inside its shell", false},
-    {&SCENE_WARP_OUT, 0.0f, NULL, NULL, NULL, false},
-    {&SCENE_ASTEROID_AMBUSH, 0.0f, NULL, NULL, NULL, false},
+     "the hits' bursts go off on the player's hull; a fireball's core sits inside its shell", false, NULL},
+    {&SCENE_WARP_OUT, 0.0f, NULL, NULL, NULL, false, NULL},
+    {&SCENE_ASTEROID_AMBUSH, 0.0f, NULL, NULL, NULL, false, NULL},
     {&SCENE_MARAUDER_DOWNFALL, 0.0f, "marauder/p*",
      "marauder#1-fireball*,marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*",
      "the hits' burns sit on the yellow ship (marauder#1); the wreck's parts start out touching each other and the "
      "fireball, and one flies out through the lens",
-     false},
-    {&SCENE_HERO_ROLLS, 0.0f, NULL, NULL, NULL, false},
-    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL, false},
+     false, NULL},
+    {&SCENE_HERO_ROLLS, 0.0f, NULL, NULL, NULL, false, NULL},
+    {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL, false, NULL},
     {&SCENE_ASSET_VIEWER, 0.0f, NULL, "marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*,apron*-base*",
      "an exploding ship's parts start out touching each other and the fireball; the base stands on the apron; the "
      "ships fire their guns at nothing",
-     true},
-    {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL, false},
+     true, NULL},
+    {&SCENE_HORIZON_TEST, 0.0f, NULL, NULL, NULL, false, NULL},
+    {&SCENE_CM_TITLE, 0.0f, NULL, "chunk*-fx_*,fx_*-fx_*", "a block popping in touches its neighbours", false,
+     "chunk*"},
+    {&SCENE_CM_OVERWORLD, 0.0f, NULL, NULL, NULL, false, "chunk*"},
+    {&SCENE_CM_WALK, 0.0f, NULL, "miner_*-miner_*,chunk*-miner_*",
+     "the miner's pieces meet at their joints; he walks on the ground, through the plants (part of the chunks)", false,
+     "chunk*"},
+    {&SCENE_CM_MINING, 0.0f, "miner_arm*,miner_pick*,miner_block*", "miner_*-miner_*,chunk*-miner_*,chunk*-fx_*",
+     "the first-person arm reaches out from just past the lens; the miner's pieces meet at their joints and he stands "
+     "on the ground; the dropped items lie on it",
+     false, "chunk*"},
+    {&SCENE_CM_BUILDING, 0.0f, "miner_arm*,miner_pick*,miner_block*",
+     "miner_*-miner_*,chunk*-miner_*,chunk*-fx_*,fx_*-fx_*",
+     "the first-person arm reaches out from just past the lens; the miner stands on the ground; a block popping in "
+     "touches its neighbours",
+     false, "chunk*"},
+    {&SCENE_CM_NIGHTFALL, 0.0f, NULL, "miner_*-miner_*,chunk*-miner_*",
+     "the miner's pieces meet at their joints; he stands on the ground", false, "chunk*"},
+    {&SCENE_CM_WORLD_TEST, 0.0f, "miner_arm*,miner_pick*,miner_block*", "miner_*-miner_*,chunk*-miner_*,chunk*-fx_*",
+     "the first-person arm reaches out from just past the lens; the miner's pieces meet at their joints, he stands on "
+     "the ground and walks through the plants (part of the chunks); a dropped item lies on the ground",
+     false, "chunk*"},
 };
 #define CHECK_N ((int)(sizeof(CHECKS) / sizeof(CHECKS[0])))
 
 // --- Per-scene statistics -----------------------------------------------------
 
-#define MAX_OBJ    16  // mesh objects per frame
-#define MAX_LABELS 32  // distinct objects per scene
+#define MAX_OBJ    96   // mesh objects per frame (a block world is up to 64 chunks)
+#define MAX_LABELS 256  // distinct objects per scene
 #define MAX_SHOTS  16
 #define MAX_SPANS  8
 #define LABEL_LEN  48
@@ -454,11 +480,17 @@ static pair_stat_t* pair_stat(int a, int b) {
     return &s_pairs[s_pair_n++];
 }
 
+static check_t const* s_check;  // the scene being checked
+static bool           listed(char const* list, char const* item);
+
 static void clearances(float t) {
     world_t w[MAX_OBJ];
     bool    built[MAX_OBJ] = {false};
     for (int i = 0; i < s_obj_n; i++) {
         for (int j = i + 1; j < s_obj_n; j++) {
+            if (s_check && listed(s_check->terrain, s_labels[s_obj[i].label].label) &&
+                listed(s_check->terrain, s_labels[s_obj[j].label].label))
+                continue;  // two pieces of one terrain: they touch by design
             pair_stat_t* ps = pair_stat(s_obj[i].label, s_obj[j].label);
             if (!built[i]) world_build(&w[i], &s_obj[i]), built[i] = true;
             if (!built[j]) world_build(&w[j], &s_obj[j]), built[j] = true;
@@ -642,6 +674,7 @@ static bool listed(char const* list, char const* item) {
 // --- One scene ----------------------------------------------------------------------------
 
 static int check_scene(check_t const* c) {
+    s_check                 = c;
     scene_def_t const* sc   = c->scene;
     float const        secs = c->secs > 0.0f ? c->secs : sc->duration;
     s_label_n = s_shot_n = s_pair_n = 0;
@@ -873,7 +906,7 @@ static bool self_test(void) {
                                                "list cap", "beam mid-air", "beam through"};
     scene_def_t const        st             = {
                            .name = "selftest", .duration = 0.2f, .init = st_init, .shutdown = st_shutdown, .submit = st_submit};
-    check_t const c    = {&st, 0.0f, NULL, NULL, NULL, false};
+    check_t const c    = {&st, 0.0f, NULL, NULL, NULL, false, NULL};
     FILE* const   keep = s_out;
     bool          ok   = true;
     s_out              = fopen("/dev/null", "w");

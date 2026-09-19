@@ -34,7 +34,26 @@
         {"source_file": "space/industrial_wall.png", "target_file": "space/industrial_wall.png"},
         {"source_file": "space/rock.png", "target_file": "space/rock.png"},
         {"source_file": "space/planet_terran.png", "target_file": "space/planet_terran.png"},
-        {"source_file": "space/planet_gas.png", "target_file": "space/planet_gas.png"}
+        {"source_file": "space/planet_gas.png", "target_file": "space/planet_gas.png"},
+        {"source_file": "craftminer/coal_ore.png", "target_file": "craftminer/coal_ore.png"},
+        {"source_file": "craftminer/cobble.png", "target_file": "craftminer/cobble.png"},
+        {"source_file": "craftminer/dirt.png", "target_file": "craftminer/dirt.png"},
+        {"source_file": "craftminer/flower_red.png", "target_file": "craftminer/flower_red.png"},
+        {"source_file": "craftminer/flower_yellow.png", "target_file": "craftminer/flower_yellow.png"},
+        {"source_file": "craftminer/glass.png", "target_file": "craftminer/glass.png"},
+        {"source_file": "craftminer/grass_side.png", "target_file": "craftminer/grass_side.png"},
+        {"source_file": "craftminer/grass_top.png", "target_file": "craftminer/grass_top.png"},
+        {"source_file": "craftminer/leaves.png", "target_file": "craftminer/leaves.png"},
+        {"source_file": "craftminer/log_side.png", "target_file": "craftminer/log_side.png"},
+        {"source_file": "craftminer/log_top.png", "target_file": "craftminer/log_top.png"},
+        {"source_file": "craftminer/miner_face.png", "target_file": "craftminer/miner_face.png"},
+        {"source_file": "craftminer/planks.png", "target_file": "craftminer/planks.png"},
+        {"source_file": "craftminer/sand.png", "target_file": "craftminer/sand.png"},
+        {"source_file": "craftminer/stone.png", "target_file": "craftminer/stone.png"},
+        {"source_file": "craftminer/tall_grass.png", "target_file": "craftminer/tall_grass.png"},
+        {"source_file": "craftminer/torch.png", "target_file": "craftminer/torch.png"},
+        {"source_file": "craftminer/torch_flame.png", "target_file": "craftminer/torch_flame.png"},
+        {"source_file": "craftminer/water.png", "target_file": "craftminer/water.png"}
       ]
     }
   ]

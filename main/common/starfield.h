@@ -25,3 +25,8 @@ void starfield_submit(void);
 // The same stars, the whole sky turned by `turn` (a rotation): another
 // solar system's sky, the band crossing it elsewhere.
 void starfield_submit_turned(mat3_t const* turn);
+
+// Only the stars above the horizon (direction y >= min_y): for a world
+// with ground, where the backdrop's flat ground would otherwise show the
+// stars under it beyond the draw distance.
+void starfield_submit_above(float min_y);

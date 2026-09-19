@@ -21,7 +21,7 @@ set(APP_SOURCES
     main/common/texcache.c
     main/space/assets/flame.c
     main/space/assets/player_ship.c
-    main/space/assets/starfield.c
+    main/common/starfield.c
     main/space/assets/station_mesh.c
     main/space/assets/station.c
     main/space/assets/title_text_mesh.c
@@ -54,6 +54,22 @@ set(APP_SOURCES
     main/space/scenes/asteroid_ambush.c
     main/space/scenes/marauder_downfall.c
     main/space/scenes/hero_rolls.c
+    main/craftminer/voxel/voxel_world.c
+    main/craftminer/voxel/voxel_mesh.c
+    main/craftminer/voxel/voxel_render.c
+    main/craftminer/voxel/voxel_fx.c
+    main/craftminer/voxel/voxel_sky.c
+    main/craftminer/assets/miner_mesh.c
+    main/craftminer/assets/miner.c
+    main/craftminer/scenes/cm_common.c
+    main/craftminer/scenes/cm_cabin.c
+    main/craftminer/scenes/cm_title.c
+    main/craftminer/scenes/cm_overworld.c
+    main/craftminer/scenes/cm_walk.c
+    main/craftminer/scenes/cm_mining.c
+    main/craftminer/scenes/cm_building.c
+    main/craftminer/scenes/cm_nightfall.c
+    main/craftminer/scenes/cm_world_test.c
     main/profile.c
     main/screenshot.c
     main/report.c
@@ -81,6 +97,12 @@ configure_file(main/app_version.h.in ${CMAKE_CURRENT_BINARY_DIR}/generated/app_v
 # MJPEG video export (main/export_mjpeg.h): renders the playlist once at a
 # fixed 30 fps into /sd/showreel/showreel.avi instead of playing it live.
 # Off in normal builds; `make export` builds with it in build-export/.
+# The engine's textured-triangle list, raised from its default 1024: the
+# block world's textured views need up to ~1300 (claudeplans/craftminer.md,
+# F-40, D-51). Before add_subdirectory(synthengine3D), so the engine sees
+# it; tools/scenecheck gets the same value from the Makefile.
+add_compile_definitions(SE_SCENE_TEXTURED_TRI_CAP=2048)
+
 option(SHOWREEL_EXPORT_MJPEG "Build the MJPEG video export instead of the live reel" OFF)
 if(SHOWREEL_EXPORT_MJPEG)
     list(APPEND APP_SOURCES main/export_mjpeg.c)
