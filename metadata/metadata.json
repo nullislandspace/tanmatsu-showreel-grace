@@ -52,6 +52,7 @@
         {"source_file": "craftminer/stone.png", "target_file": "craftminer/stone.png"},
         {"source_file": "craftminer/tall_grass.png", "target_file": "craftminer/tall_grass.png"},
         {"source_file": "craftminer/torch.png", "target_file": "craftminer/torch.png"},
+        {"source_file": "craftminer/leaves_fast.png", "target_file": "craftminer/leaves_fast.png"},
         {"source_file": "craftminer/torch_flame.png", "target_file": "craftminer/torch_flame.png"},
         {"source_file": "craftminer/water.png", "target_file": "craftminer/water.png"}
       ]
