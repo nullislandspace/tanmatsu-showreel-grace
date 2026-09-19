@@ -253,7 +253,8 @@ right marauder fills half the screen, so this scene has the least headroom.
 
 **Video export** (`make export`, software JPEG at quality 85): 26.0 s of video in
 191.6 s, i.e. about 7x slower than real time. Per frame: JPEG encode ~200 ms,
-SD write ~23 ms, 12–30 KB.
+SD write ~23 ms, 12–30 KB. The eleven-scene reel (2026-09-19): 111.8 s of video,
+3354 frames, in 866.2 s (7.7x); encode 208 ms, write 23 ms per frame.
 
 **Asset viewer, full-reel assets** (`perf scene=assets secs=96`, 8 s per asset): rast per
 shot in ms (30 fps unless noted): player 8.2, marauder 9.9, station 14.8, title 6.9 (~490

@@ -135,7 +135,7 @@ results to `results/`. Shot images stay on the SD card in `/sd/showreel/test/`;
 
 `make export` builds the reel with the `SHOWREEL_EXPORT_MJPEG` option, installs and starts
 it: it renders every playlist scene once at exactly 30 frames per second of show time and
-writes an MJPEG AVI to `/sd/showreel/showreel.avi` (about 3 minutes for the 26 s reel),
+writes an MJPEG AVI to `/sd/showreel/showreel.avi` (about 14 minutes for the 112 s reel),
 then returns to the launcher. `make install` puts the live reel back. To get an MP4:
 
 ```sh

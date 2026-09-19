@@ -432,7 +432,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
 | 11.1 | Playlist = all eleven in order (C4.1); scene-to-scene continuity (liveries, directions, where the sun is); the user watches the whole reel on the badge | in progress | 2026-09-19: the playlist holds all eleven scenes in order (~112 s) and is installed on the badge for the user to watch. Continuity: in the first system both marauders' sides and the sun match between scenes 6–8. The second system shares one sky, sun and gas giant (`system2.c`); scene 10 mirrors the formation (D-38). Waiting for the user's viewing |
 | 11.2 | `perf` per scene; the slow shots listed in `devdocs/performance.md`; performance decisions with the user (D-7), including the planet base's apron (F-26, D-33) | todo | |
 | 11.3 | Reference hashes for key frames of every scene (`testrefs`) | todo | |
-| 11.4 | MJPEG export of the full reel; the user checks the video | todo | |
+| 11.4 | MJPEG export of the full reel; the user checks the video | in progress | 2026-09-19: `make export` at `2ba0993`: 3354 frames (111.8 s) in 866 s, no errors (F-29); the live reel re-installed afterwards (`make install`); waiting for the user's check of the video |
 | **12** | **Full reel: wrap-up** | | |
 | 12.1 | README, performance notes, this document | todo | |
 | 12.2 | Commit and push, only when the user asks | todo | |
@@ -541,6 +541,7 @@ This needs a host-side stand-in for the engine header (`scene_tri`, `scene_textu
   - Looking up at a ship against the sky, or across the plain: 20–30 fps (the sky and ground beyond the apron are PPA fills).
   - Looking along the ground at the works: pad_strafe's ground shot, with the halls, tanks and pad filling ~80% of the frame, draws in 88 ms (10.6 fps).
   - The shots are framed for the look; the frame rate is left for step 11.2 with F-26 and D-33.
+- **F-29** 2026-09-19, MJPEG export of the eleven-scene reel (`make export`, commit `2ba0993`): 3354 frames (111.8 s of video at 30 fps) in 866.2 s, about 7.7x slower than real time. Encode 208 ms/frame, write 23 ms/frame; sampled frames 12–30 KB (the title largest), so the file is roughly 60 MB, in `/sd/showreel/showreel.avi`.
 
 ### Decisions (D-n), each with date and who decided
 - **D-1** User: "in the spirit of" Frontier II, with our own sequence and models, textured.
