@@ -49,11 +49,11 @@
   "reason": "flyby-aimed-lasers-hits"
  },
  "spacestation_flyby_017000.png": {
-  "captured": "20260919T002927Z",
+  "captured": "20260919T180537Z",
   "engine": "2.0",
-  "fnv": "ddfbd56c",
-  "git": "20c8dbb5b5-dirty",
-  "reason": "flyby-aimed-lasers-hits"
+  "fnv": "770e7657",
+  "git": "82af0f6298",
+  "reason": "flyby-hits-raycast-D39"
  },
  "turntable_000000.png": {
   "captured": "20260918T162005Z",

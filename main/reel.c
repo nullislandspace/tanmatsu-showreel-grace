@@ -5,10 +5,11 @@
 #include "reel.h"
 #include <stddef.h>
 #include <string.h>
-#include "assets/texcache.h"
+#include "common/texcache.h"
+#include "dev/dev.h"
 #include "esp_log.h"
-#include "scenes/scenes.h"
 #include "showtime.h"
+#include "space/space.h"
 
 static char const TAG[] = "reel";
 

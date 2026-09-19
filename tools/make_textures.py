@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Generate the showreel's bare-metal plate textures into textures/.
+"""Generate the showreel's textures into textures/<segment>/ (one
+subdirectory per reel segment, as the code in main/<segment>/).
 
 Procedural and seeded, so the PNGs are reproducible from this script
 instead of being opaque binaries: change a number here, re-run, commit
@@ -12,7 +13,7 @@ mask), and at 2 bytes a texel in RGB565 a plate costs 8 KB of internal
 SRAM. The flame is 64x8 (1 KB); the two planet maps are 128x64
 (equirectangular, 16 KB).
 
-    python3 tools/make_textures.py            # write textures/*.png
+    python3 tools/make_textures.py            # write textures/<segment>/*.png
     python3 tools/make_textures.py --preview  # also write a 4x contact sheet
 """
 import sys
@@ -369,31 +370,34 @@ def planet_gas():
     return np.clip(img, 0, 255).astype(np.uint8)
 
 
+# Keyed by the path under textures/. The generators share their seeded
+# random streams in this order, so keep it: a reordered entry changes
+# every texture after it.
 TEXTURES = {
-    "plate_riveted.png": riveted,
-    "plate_brushed.png": brushed,
-    "plate_gunmetal.png": gunmetal,
-    "plate_tread.png": tread,
-    "flame.png": flame,
-    "station_hull.png": station_hull,
-    "station_ring.png": station_ring,
-    "marauder_green.png": marauder_green,
-    "marauder_yellow.png": marauder_yellow,
-    "flame_red.png": flame_red,
-    "ground.png": ground,
-    "pad.png": pad,
-    "industrial_wall.png": industrial_wall,
-    "rock.png": rock,
-    "planet_terran.png": planet_terran,
-    "planet_gas.png": planet_gas,
+    "space/plate_riveted.png": riveted,
+    "space/plate_brushed.png": brushed,
+    "space/plate_gunmetal.png": gunmetal,
+    "space/plate_tread.png": tread,
+    "space/flame.png": flame,
+    "space/station_hull.png": station_hull,
+    "space/station_ring.png": station_ring,
+    "space/marauder_green.png": marauder_green,
+    "space/marauder_yellow.png": marauder_yellow,
+    "space/flame_red.png": flame_red,
+    "space/ground.png": ground,
+    "space/pad.png": pad,
+    "space/industrial_wall.png": industrial_wall,
+    "space/rock.png": rock,
+    "space/planet_terran.png": planet_terran,
+    "space/planet_gas.png": planet_gas,
 }
 
 
 def main():
-    OUT.mkdir(exist_ok=True)
     tiles = []
     for name, fn in TEXTURES.items():
         img = fn()
+        (OUT / name).parent.mkdir(parents=True, exist_ok=True)
         Image.fromarray(img, "RGB").save(OUT / name, optimize=True)
         tiles.append(img)
         print(f"wrote {OUT / name}")

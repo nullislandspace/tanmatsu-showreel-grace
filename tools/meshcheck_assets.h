@@ -6,12 +6,12 @@
 //  here, and its source file to MESHCHECK_SRCS in the Makefile.
 // =====================================================================
 
-#include "assets/asteroid_mesh.h"
-#include "assets/marauder_mesh.h"
-#include "assets/planet_base_mesh.h"
-#include "assets/station_mesh.h"
-#include "assets/title_text_mesh.h"
-#include "objects/ship_model.h"
+#include "space/assets/asteroid_mesh.h"
+#include "space/assets/marauder_mesh.h"
+#include "space/assets/planet_base_mesh.h"
+#include "space/assets/station_mesh.h"
+#include "space/assets/title_text_mesh.h"
+#include "space/objects/ship_model.h"
 
 // The vendored player ship, straight from its header. Informational
 // only: it is an export from synthracer's 3MF, not built here, so a

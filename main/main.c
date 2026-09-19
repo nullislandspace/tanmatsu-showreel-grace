@@ -7,8 +7,8 @@
 //  blit. This file is what a game plugs into that loop.
 //
 //  What is on screen is the reel's business (reel.h): a playlist of
-//  scenes (scenes/), each a pure function of the show clock
-//  (showtime.h), built from shared assets (assets/). This file only
+//  scenes (main/<segment>/scenes/), each a pure function of the show clock
+//  (showtime.h), built from its segment's assets. This file only
 //  runs the frame: clock, backdrop, submit, rasterize, stats, keys.
 //
 //  The backdrop (black space, or sky and ground) is painted by the PPA,

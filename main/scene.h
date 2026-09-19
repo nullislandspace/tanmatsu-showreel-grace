@@ -9,7 +9,8 @@
 //  its own (the automated shot tests jump straight to one) and a slow
 //  frame cannot make the choreography drift (showtime.h).
 //
-//  Assets are shared between scenes (assets/): a scene's init calls the
+//  Assets are shared between the scenes of a segment (<segment>/assets/;
+//  across segments only through common/): a scene's init calls the
 //  init of every asset it uses, and those are idempotent.
 // =====================================================================
 

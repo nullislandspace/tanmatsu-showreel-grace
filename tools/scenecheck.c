@@ -52,10 +52,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "assets/laser.h"
+#include "space/assets/laser.h"
 #include "horizon.h"
 #include "mesh_render.h"
-#include "scenes/scenes.h"
+#include "dev/dev.h"
+#include "space/space.h"
 #include "synthengine3d.h"
 
 #define FPS          30
