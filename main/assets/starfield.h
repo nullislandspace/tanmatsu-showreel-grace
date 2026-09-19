@@ -13,9 +13,15 @@
 //  stars crowd a band across the sky, a hint of a galactic plane.
 // =====================================================================
 
+#include "xform.h"
+
 // Build the star table. Idempotent.
 void starfield_init(void);
 
 // Submit the stars for the current camera. Call after the scene's camera
 // is set; geometry drawn afterwards still hides them (depth test).
 void starfield_submit(void);
+
+// The same stars, the whole sky turned by `turn` (a rotation): another
+// solar system's sky, the band crossing it elsewhere.
+void starfield_submit_turned(mat3_t const* turn);

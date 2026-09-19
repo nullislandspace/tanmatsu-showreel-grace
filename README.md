@@ -9,8 +9,8 @@ textured instead of flat-shaded.
 
 ## The reel
 
-The playlist (`main/reel.c`) plays in a loop, about 72 s. It will grow to eleven scenes
-(`claudeplans/implementation.md`, Part C4); these seven exist:
+The playlist (`main/reel.c`) plays eleven scenes in a loop, about 112 s
+(`claudeplans/implementation.md`, Part C4):
 
 1. **`title`** (12.5 s) -- "Borderworlds:" / "Superior" in 3D block letters, drifting in
    from above and below, canted into the screen, on the planet's sky; then the hero
@@ -29,6 +29,16 @@ The playlist (`main/reel.c`) plays in a loop, about 72 s. It will grow to eleven
    the ring, close onto its tail and open fire -- beams straight off their noses, near
    misses and three hits that burn on its hull. Four shots: establish, chase (through the gap),
    exit (looking back at the wheel), reverse chase.
+8. **`warp_out`** (7.5 s) -- the player's ship pulls ahead and jumps to hyperspace;
+   the marauders fly on, then jump after it, one by one.
+9. **`asteroid_ambush`** (16 s) -- another solar system, a gas giant in the sky: the
+   ship drops out of warp and hides behind a big asteroid; the marauders warp in on its
+   trail and fly past; it slides out behind them and opens fire.
+10. **`marauder_downfall`** (8.8 s) -- close beside the pair under blue fire from behind:
+    the yellow marauder is hit three times and blows apart; the green one climbs away
+    and warps out.
+11. **`hero_rolls`** (8 s) -- close beside the player's ship at speed, space dust
+    streaming past: two barrel rolls, then it pulls away towards the gas giant.
 
 Three more scenes are compiled in but not played: `turntable` (the player's ship on a
 turntable, the original single item), `assets` (a development viewer, one named shot

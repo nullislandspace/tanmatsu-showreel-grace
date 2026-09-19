@@ -271,6 +271,13 @@ frame rate is how much textured surface fills the frame, not the triangle count.
 at a ship against the PPA sky is cheap; looking along the ground at the works is not.
 Deferred to step 11.2 (F-26, F-28, D-33).
 
+**Scenes 8–11** (`perf scene=...`, 2026-09-19): `warp_out` 30.0 fps (rast 3.8 / 5.8 ms);
+`asteroid_ambush` arrival 30.0 (15.6 / 16.2 ms), pass 30.0 (12.4 / 22.1 ms), **ambush 28.9**
+(18.5 / 44.9 ms: the gas giant's disc and the big rock both large in the chase view);
+`marauder_downfall` 30.0 (8.6 / 25.6 ms, the peak in the blast); `hero_rolls` 29.9
+(8.3 / 20.3 ms). The ambush's textured peak is ~840 per frame (cap 1024): the rock (~320
+facing), the giant (~260) and the small rocks.
+
 **Sky/ground backdrop** (`perf scene=horizon`, the dev scene, 12 s): 30 fps throughout.
 `wait` (the PPA fills plus the CPU's share) is 2.5 ms with the camera level: two fills,
 where the space backdrop's one full-screen fill leaves ~1.8 ms. While the camera rolls

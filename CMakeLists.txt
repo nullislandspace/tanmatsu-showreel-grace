@@ -49,6 +49,11 @@ set(APP_SOURCES
     main/scenes/formation.c
     main/scenes/marauder_pursuit.c
     main/scenes/spacestation_flyby.c
+    main/scenes/system2.c
+    main/scenes/warp_out.c
+    main/scenes/asteroid_ambush.c
+    main/scenes/marauder_downfall.c
+    main/scenes/hero_rolls.c
     main/profile.c
     main/screenshot.c
     main/report.c

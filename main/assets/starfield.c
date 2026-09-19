@@ -75,3 +75,12 @@ void starfield_submit(void) {
         scene_point(p.x, p.y, p.z, s_stars[i].argb);
     }
 }
+
+void starfield_submit_turned(mat3_t const* turn) {
+    if (!s_ready) return;
+    vec3_t const eye = camera_eye();
+    for (int i = 0; i < STAR_COUNT; i++) {
+        vec3_t const p = v3_add(eye, v3_scale(mat3_apply(turn, s_stars[i].dir), STAR_DIST));
+        scene_point(p.x, p.y, p.z, s_stars[i].argb);
+    }
+}

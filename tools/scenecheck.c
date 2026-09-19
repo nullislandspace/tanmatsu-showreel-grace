@@ -78,6 +78,13 @@ static check_t const CHECKS[] = {
     {&SCENE_MARAUDER_PURSUIT, 0.0f, NULL, NULL, NULL},
     {&SCENE_SPACESTATION_FLYBY, 0.0f, NULL, "player_ship*-fireball*,fireball*-fireball*",
      "the hits' bursts go off on the player's hull; a fireball's core sits inside its shell"},
+    {&SCENE_WARP_OUT, 0.0f, NULL, NULL, NULL},
+    {&SCENE_ASTEROID_AMBUSH, 0.0f, NULL, NULL, NULL},
+    {&SCENE_MARAUDER_DOWNFALL, 0.0f, "marauder/p*",
+     "marauder#1-fireball*,marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*",
+     "the hits' burns sit on the yellow ship (marauder#1); the wreck's parts start out touching each other and the "
+     "fireball, and one flies out through the lens"},
+    {&SCENE_HERO_ROLLS, 0.0f, NULL, NULL, NULL},
     {&SCENE_TURNTABLE, 10.0f, NULL, NULL, NULL},
     {&SCENE_ASSET_VIEWER, 0.0f, NULL, "marauder/p*-marauder/p*,marauder/p*-fireball*,fireball*-fireball*,apron*-base*",
      "an exploding ship's parts start out touching each other and the fireball; the base stands on the apron"},

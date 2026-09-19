@@ -36,6 +36,16 @@ extern scene_def_t const SCENE_MARAUDER_PURSUIT;
 // marauders.
 extern scene_def_t const SCENE_SPACESTATION_FLYBY;
 
+// Scene 8: the hero ship warps out; the marauders follow.
+extern scene_def_t const SCENE_WARP_OUT;
+// Scene 9: another system -- the hero hides behind an asteroid and
+// ambushes the marauders.
+extern scene_def_t const SCENE_ASTEROID_AMBUSH;
+// Scene 10: under the hero's fire the yellow marauder explodes; the
+// green one warps away.
+extern scene_def_t const SCENE_MARAUDER_DOWNFALL;
+// Scene 11: close-up of the hero ship at speed, barrel-rolling.
+extern scene_def_t const SCENE_HERO_ROLLS;
 // Development: orbits each asset in turn (one named shot per asset).
 extern scene_def_t const SCENE_ASSET_VIEWER;
 
