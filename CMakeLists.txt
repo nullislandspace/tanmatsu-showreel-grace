@@ -109,6 +109,14 @@ if(SHOWREEL_EXPORT_MJPEG)
     add_compile_definitions(SHOWREEL_EXPORT_MJPEG=1)
 endif()
 
+# One act only: the scenes of that segment play, and nothing else (see
+# reel.c). Empty, the default, plays the whole reel. `make export
+# SEGMENT=craftminer` makes a video of a single act.
+set(SHOWREEL_SEGMENT "" CACHE STRING "Play only this segment's act (space, craftminer; empty: all)")
+if(SHOWREEL_SEGMENT)
+    add_compile_definitions(SHOWREEL_SEGMENT="${SHOWREEL_SEGMENT}")
+endif()
+
 # Include directories — add paths to your headers here
 set(APP_INCLUDES
     main

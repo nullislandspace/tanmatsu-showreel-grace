@@ -148,12 +148,15 @@ TESTFLAGS ?=
 # starts it: it renders every playlist scene once at a fixed 30 fps into
 # /sd/showreel/showreel.avi (logging its progress on the console), then
 # returns to the launcher. `make install` puts the live reel back.
+# SEGMENT=<name> (one of SEGMENTS) exports that act on its own:
+#   make export SEGMENT=craftminer
 # Fetching the file over BadgeLink is slow (~18 KB/s, i.e. many minutes
 # for a video of tens of MB); taking the SD card out is quicker:
 #   badgelink/tools/badgelink.sh $(BADGELINK_CONN) fs download /sd/showreel/showreel.avi showreel.avi
 .PHONY: export
 export:
-	$(MAKE) build install run BUILD=build-export CMAKE_FLAGS=-DSHOWREEL_EXPORT_MJPEG=ON
+	$(MAKE) build install run BUILD=build-export \
+	  CMAKE_FLAGS="-DSHOWREEL_EXPORT_MJPEG=ON -DSHOWREEL_SEGMENT=$(SEGMENT)"
 
 .PHONY: testrun cycle testrefs testcompare recover
 testrun:

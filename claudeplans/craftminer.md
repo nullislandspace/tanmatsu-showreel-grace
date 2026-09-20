@@ -241,7 +241,7 @@ Each scene is its own file in `main/craftminer/scenes/`, declared in `craftminer
 | 3.6 | `cm_nightfall` | done | 2026-09-19: scenecheck OK; watched live on the badge by the user: "scenes look fine" (D-52). Per-shot perf still to measure (4.1). |
 | **4** | **Wrap-up** | | |
 | 4.1 | Perf section in `devdocs/performance.md`; decide on the textured cap | todo | |
-| 4.2 | README (CraftMiner scenes); MJPEG export of the CraftMiner playlist for the user's review | todo | |
+| 4.2 | README (CraftMiner scenes); MJPEG export of the CraftMiner playlist for the user's review | part | 2026-09-20: the export runs per act (`make export SEGMENT=craftminer`, D-54); README documents it. The CraftMiner video (74 s, 2220 frames) is on the badge's SD card as `/sd/showreel/showreel.avi`. The README's CraftMiner scene list is still todo. |
 | 4.3 | Commit and push: **only when the user asks** | done | 2026-09-19: engine (V2.0) and showreel committed and pushed; `craftminer` merged into `main` and pushed (D-52). The full reel order (D-44, D-53) followed on `main`. |
 
 ## Part E: findings and decisions log
@@ -310,6 +310,7 @@ Each scene is its own file in `main/craftminer/scenes/`, declared in `craftminer
 - **D-51** 2026-09-19, Claude, under D-45 (measured: F-40): `SE_SCENE_TEXTURED_TRI_CAP` = 2048 for the app build (CMakeLists.txt, before the engine is added; the Makefile passes the same to scenecheck). About 70 KB more PSRAM (the list does not fit internal SRAM); no per-frame cost.
 - **D-52** 2026-09-19, user: after watching the six scenes live on the badge, "scenes look fine": commit and push the engine and the app, merge `craftminer` into `main`, push everything. Still open: the per-shot perf section (4.1), the README and a video export (4.2), and D-44's final order (the space act back in the playlist, CraftMiner after it).
 - **D-53** 2026-09-19, user: the space act back in the playlist, CraftMiner after it (D-44's final order): 17 scenes, about 3 minutes, looping. Installed for the user to watch, then committed on the user's request. The handover (space to the block world's sky) and the loop point are plain cuts, as between the other scenes.
+- **D-54** 2026-09-20, user ("export the craftminer showreel as mjpeg"), Claude's design: the playlist is now one array per act (`ACT_SPACE`, `ACT_CRAFTMINER` in `reel.c`, flattened at init), and a build can name one segment: `make export SEGMENT=craftminer` (`-DSHOWREEL_SEGMENT=`, CMake cache variable). Default, and for any unknown name (logged as an error), every act plays, so the live reel is unchanged. This is how per-act review videos are made, without commenting scenes out of the playlist as during development (D-42).
 
 ## Verification
 - **Host:** `make meshcheck` (the new meshes and mesher cases) and `make scenecheck` (all scenes, the new ones included; no cap overruns; near and contact rules).

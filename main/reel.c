@@ -43,9 +43,9 @@ static scene_def_t const* const ALL_SCENES[] = {
 };
 #define ALL_N (sizeof(ALL_SCENES) / sizeof(ALL_SCENES[0]))
 
-// What plays, in order, looping: the space act, then CraftMiner
-// (claudeplans/craftminer.md, D-44).
-static scene_def_t const* const PLAYLIST[] = {
+// What plays, in order, looping: one act per segment of the reel, in
+// this order (claudeplans/craftminer.md, D-44).
+static scene_def_t const* const ACT_SPACE[] = {
     &SCENE_TITLE,
     &SCENE_PLANET_LANDING,
     &SCENE_MARAUDER_APPROACH,
@@ -57,6 +57,8 @@ static scene_def_t const* const PLAYLIST[] = {
     &SCENE_ASTEROID_AMBUSH,
     &SCENE_MARAUDER_DOWNFALL,
     &SCENE_HERO_ROLLS,
+};
+static scene_def_t const* const ACT_CRAFTMINER[] = {
     &SCENE_CM_TITLE,
     &SCENE_CM_OVERWORLD,
     &SCENE_CM_WALK,
@@ -65,7 +67,45 @@ static scene_def_t const* const PLAYLIST[] = {
     &SCENE_CM_NIGHTFALL,
 };
 // clang-format on
-#define PLAY_N (sizeof(PLAYLIST) / sizeof(PLAYLIST[0]))
+
+#define N_OF(a) (sizeof(a) / sizeof((a)[0]))
+static struct {
+    char const*                     name;  // the segment it belongs to
+    scene_def_t const* const* const scenes;
+    size_t                          n;
+} const ACTS[] = {
+    {"space", ACT_SPACE, N_OF(ACT_SPACE)},
+    {"craftminer", ACT_CRAFTMINER, N_OF(ACT_CRAFTMINER)},
+};
+#define ACT_N (sizeof(ACTS) / sizeof(ACTS[0]))
+
+// Every act plays unless the build names one: `make export SEGMENT=craftminer`
+// cuts an export down to a single act, which is how the per-act review
+// videos are made. An unknown name plays everything, with a complaint.
+#ifndef SHOWREEL_SEGMENT
+#define SHOWREEL_SEGMENT ""
+#endif
+
+// The acts that play, flattened (reel_init fills it); it holds every
+// act's scenes, which is all of them when no segment is named.
+static scene_def_t const* s_play[N_OF(ACT_SPACE) + N_OF(ACT_CRAFTMINER)];
+static size_t             s_play_n;
+
+static void build_playlist(void) {
+    char const* want = SHOWREEL_SEGMENT;
+    // Pass 0 takes the act that was asked for; pass 1 runs only if that
+    // matched nothing, and takes them all.
+    for (int pass = 0; pass < 2; pass++) {
+        for (size_t a = 0; a < ACT_N; a++) {
+            if (pass == 0 && want[0] != '\0' && strcmp(ACTS[a].name, want) != 0) continue;
+            for (size_t i = 0; i < ACTS[a].n && s_play_n < N_OF(s_play); i++) s_play[s_play_n++] = ACTS[a].scenes[i];
+        }
+        if (s_play_n > 0) {
+            if (pass == 1) ESP_LOGE(TAG, "no segment called '%s': playing every act", want);
+            return;
+        }
+    }
+}
 
 static scene_def_t const* s_cur;
 static size_t             s_play_idx;
@@ -85,17 +125,18 @@ static void enter(scene_def_t const* sc) {
 
 void reel_init(char const* asset_dir) {
     texcache_init(asset_dir);
+    build_playlist();
     // A playlist scene missing from ALL_SCENES would play uninitialised.
-    for (size_t p = 0; p < PLAY_N; p++) {
+    for (size_t p = 0; p < s_play_n; p++) {
         bool known = false;
-        for (size_t i = 0; i < ALL_N; i++) known |= ALL_SCENES[i] == PLAYLIST[p];
-        if (!known) ESP_LOGE(TAG, "playlist scene %s is not in ALL_SCENES: not initialised", PLAYLIST[p]->name);
+        for (size_t i = 0; i < ALL_N; i++) known |= ALL_SCENES[i] == s_play[p];
+        if (!known) ESP_LOGE(TAG, "playlist scene %s is not in ALL_SCENES: not initialised", s_play[p]->name);
     }
     for (size_t i = 0; i < ALL_N; i++) {
         if (ALL_SCENES[i]->init) ALL_SCENES[i]->init(asset_dir);
     }
     s_play_idx = 0;
-    enter(PLAYLIST[0]);
+    enter(s_play[0]);
 }
 
 void reel_shutdown(void) {
@@ -107,16 +148,16 @@ void reel_shutdown(void) {
 
 void reel_next(void) {
     s_hold     = false;
-    s_play_idx = (s_play_idx + 1) % PLAY_N;
+    s_play_idx = (s_play_idx + 1) % s_play_n;
     if (s_play_idx == 0) s_cycles++;
-    enter(PLAYLIST[s_play_idx]);
+    enter(s_play[s_play_idx]);
 }
 
 void reel_restart(void) {
     s_hold     = false;
     s_cycles   = 0;
     s_play_idx = 0;
-    enter(PLAYLIST[0]);
+    enter(s_play[0]);
 }
 
 int reel_cycles(void) {
