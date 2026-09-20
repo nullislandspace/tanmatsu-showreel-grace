@@ -17,8 +17,8 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "reel.h"
-#include "showtime.h"
 #include "synthengine3d.h"
+#include "testkit/showtime.h"
 
 // stb_image_write (public domain, main/third_party/): only its JPEG
 // writer is used, through a callback, so no stdio variants; its few

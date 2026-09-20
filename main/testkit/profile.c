@@ -1,5 +1,5 @@
 // =====================================================================
-//  Showreel  --  frame phase timing (see profile.h)
+//  Test kit  --  frame phase timing (see profile.h)
 // =====================================================================
 
 #include "profile.h"

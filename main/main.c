@@ -25,7 +25,7 @@
 // =====================================================================
 
 #include <stdbool.h>
-#include "devtest.h"
+#include "testkit/devtest.h"
 #ifdef SHOWREEL_EXPORT_MJPEG
 #include "export_mjpeg.h"
 #endif
@@ -34,11 +34,11 @@
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "graceloader.h"
-#include "profile.h"
 #include "reel.h"
-#include "screenshot.h"
-#include "showtime.h"
 #include "synthengine3d.h"  // the whole engine public API
+#include "testkit/profile.h"
+#include "testkit/screenshot.h"
+#include "testkit/showtime.h"
 
 static char const TAG[] = "showreel";
 
@@ -147,6 +147,23 @@ static void log_frame_stats(void) {
 }
 
 // Once, after the engine has booted display + audio + scene, before the
+// What the device tests address: a scene of the reel (testkit/devtest.h).
+// reel.h already speaks this language, so these are its own calls.
+static devtest_content_t const TEST_CONTENT = {
+    .select    = reel_hold,
+    .duration  = reel_scene_duration,
+    .started   = reel_scene_start,
+    .name      = reel_scene_name,
+    .shot_name = reel_shot_name,
+};
+
+static devtest_config_t const TEST = {
+    .app           = "at.cavac.showreel",
+    .shot_dir      = "/sd/showreel/test",
+    .content       = &TEST_CONTENT,
+    .stats_restart = stats_restart,
+};
+
 // first frame.
 static void on_init(void* user) {
     (void)user;
@@ -176,10 +193,11 @@ static void on_init(void* user) {
     // sets its own light when it is entered.
     reel_init(graceloader_get_install_basepath());
 
-    // Debug console for the automated tests (devtest.h): idle unless the
-    // host sends a command, then it runs the test and returns to the
-    // launcher by itself.
-    devtest_start(stats_restart);
+    // Debug console for the automated tests (testkit/devtest.h): idle
+    // unless the host sends a command, then it runs the test and returns
+    // to the launcher by itself. The reel is what it addresses: a test
+    // names a scene, and the kit holds it, times it and shoots it.
+    devtest_start(&TEST);
 
 #ifdef SHOWREEL_EXPORT_MJPEG
     // Export build: render the playlist once at a fixed 30 fps into an

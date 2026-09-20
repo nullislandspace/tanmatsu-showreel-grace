@@ -1,5 +1,5 @@
 // =====================================================================
-//  Showreel  --  the show clock (see showtime.h)
+//  Test kit  --  the show clock (see showtime.h)
 // =====================================================================
 
 #include "showtime.h"

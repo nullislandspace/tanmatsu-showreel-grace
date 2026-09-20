@@ -311,7 +311,7 @@ print(b.decode(errors='replace'))"
 ```
 
 Every second the app logs two lines:
-- the phase split (`main/profile.c`)
+- the phase split (`main/testkit/profile.c`)
 - FPS, renderer, raster split and SRAM (`log_frame_stats()` in `main/main.c`)
 
 `make install` fails with `ConnectionResetError` while the app is still

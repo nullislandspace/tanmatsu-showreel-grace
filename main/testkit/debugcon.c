@@ -1,16 +1,35 @@
 // =====================================================================
-//  Showreel  --  debug-console command listener (see debugcon.h)
+//  Test kit  --  debug-console command listener (see debugcon.h)
 // =====================================================================
 
 #include "debugcon.h"
 #include <string.h>
+// The build id, if the app generates one (see README): it is what lets
+// the host refuse to believe results from a stale build on the badge.
+// Without it the records still come, saying "unknown".
+#if defined(__has_include)
+#if __has_include("app_version.h")
 #include "app_version.h"
+#endif
+#endif
+#ifndef APP_GIT_HASH
+#define APP_GIT_HASH "unknown"
+#endif
+#ifndef APP_BUILD_TIME
+#define APP_BUILD_TIME "unknown"
+#endif
 #include "driver/usb_serial_jtag.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "reel.h"
 #include "report.h"
+// The engine, if this app has one: its version goes into every identity
+// record, which is how a test result records what it ran against.
+#ifdef TESTKIT_NO_ENGINE
+#define TESTKIT_ENGINE_VERSION "-"
+#else
 #include "synthengine3d.h"
+#define TESTKIT_ENGINE_VERSION se_version_string()
+#endif
 
 static char const TAG[] = "debugcon";
 
@@ -22,14 +41,20 @@ typedef struct {
     char line[DEBUGCON_LINE_MAX];
 } cmd_t;
 
-static QueueHandle_t s_queue;
-static volatile bool s_busy;
+static QueueHandle_t              s_queue;
+static volatile bool              s_busy;
+static debugcon_identity_t const* s_id;
 
+// The host matches "git" against the build it expects, so a stale app on
+// the badge is caught before its results are believed; "scene" is what
+// the app calls its current state.
 void debugcon_hello(char const* kind) {
+    char const* const app   = (s_id && s_id->app) ? s_id->app : "app";
+    char const* const state = (s_id && s_id->state) ? s_id->state() : "";
     report_emitf(kind,
-                 "{\"t\":\"%s\",\"app\":\"at.cavac.showreel\",\"git\":\"%s\",\"built\":\"%s\",\"engine\":\"%s\","
+                 "{\"t\":\"%s\",\"app\":\"%s\",\"git\":\"%s\",\"built\":\"%s\",\"engine\":\"%s\","
                  "\"scene\":\"%s\",\"free_int\":%u,\"free_psram\":%u}",
-                 kind, APP_GIT_HASH, APP_BUILD_TIME, se_version_string(), reel_scene_name(),
+                 kind, app, APP_GIT_HASH, APP_BUILD_TIME, TESTKIT_ENGINE_VERSION, state ? state : "",
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_SPIRAM));
 }
@@ -95,7 +120,8 @@ static void debugcon_task(void* arg) {
     }
 }
 
-void debugcon_start(void) {
+void debugcon_start(debugcon_identity_t const* id) {
+    s_id    = id;
     s_queue = xQueueCreate(4, sizeof(cmd_t));
     xTaskCreate(debugcon_task, "debugcon", 4096, NULL, 4, NULL);
 }

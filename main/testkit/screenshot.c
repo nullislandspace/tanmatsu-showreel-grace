@@ -1,5 +1,5 @@
 // =====================================================================
-//  Showreel  --  debug screen capture (see screenshot.h)
+//  Test kit  --  debug screen capture (see screenshot.h)
 // =====================================================================
 
 #include "screenshot.h"
@@ -11,7 +11,13 @@
 
 static char const TAG[] = "shot";
 
-#define SHOT_DIR    "/sd/showreel"
+// Where auto-numbered shots land. An app sets its own in CMakeLists:
+// add_compile_definitions(SCREENSHOT_DIR="/sd/myapp"). Created if it is
+// not there; screenshot_capture_to() ignores it and takes a full path.
+#ifndef SCREENSHOT_DIR
+#define SCREENSHOT_DIR "/sd/testkit"
+#endif
+#define SHOT_DIR    SCREENSHOT_DIR
 #define SHOT_MAX    1000
 #define BLOCK_LIMIT 60000u  // payload per stored block; the format allows 65535
 

@@ -1,5 +1,5 @@
 // =====================================================================
-//  Showreel  --  test records on the debug console (see report.h)
+//  Test kit  --  test records on the debug console (see report.h)
 // =====================================================================
 
 #include "report.h"
@@ -25,8 +25,8 @@ void report_emit(char const* kind, char const* json) {
     static char line[REPORT_JSON_MAX + 64];
     if (s_mutex == NULL) s_mutex = xSemaphoreCreateMutex();
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-    int const n =
-        snprintf(line, sizeof(line), "@@SR-%s@@ %s @@%08" PRIx32 "@@\n", kind, json, report_crc32(json, strlen(json)));
+    int const n = snprintf(line, sizeof(line), "@@" REPORT_PREFIX "-%s@@ %s @@%08" PRIx32 "@@\n", kind, json,
+                           report_crc32(json, strlen(json)));
     if (n > 0) {
         // One write of the whole line: the smallest window for log output
         // from another task to interleave.

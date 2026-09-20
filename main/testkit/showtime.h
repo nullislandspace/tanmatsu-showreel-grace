@@ -1,6 +1,6 @@
 #pragma once
 // =====================================================================
-//  Showreel  --  the show clock
+//  Test kit  --  the show clock
 // ---------------------------------------------------------------------
 //  The ONLY place the reel reads "what time is it". Every scene and
 //  asset is a pure function of the time this returns (never of an

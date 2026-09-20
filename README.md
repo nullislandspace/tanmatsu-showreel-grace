@@ -67,8 +67,9 @@ show clock leaves out), **F1** returns to the launcher.
   or sky and ground split at the horizon (`main/horizon.c`, as in Stunt Racer, but
   also upside down). A scene declares which in its `scene_def_t`; the camera is set
   first so the fills can run while the scene submits.
-- **The show clock** (`main/showtime.c`) is the only time source: the wall clock, or
-  fixed steps (for the video export and the shot tests).
+- **The show clock** (`main/testkit/showtime.c`) is the only time source: the wall clock,
+  or fixed steps (for the video export and the shot tests). Every scene being a pure
+  function of it is what makes the reference-hash tests and the export work.
 - **Assets** (`main/space/assets/`) are generators any scene can reuse: the player's ship, the
   marauder (one type, green and yellow liveries), the wheel station, a starfield of
   single-pixel `scene_point`s, Frontier-style engine flames and laser beams (red for the
@@ -141,9 +142,14 @@ make recover                                          # after a crash or hang: r
 ```
 
 The app runs the test when it receives the command over the debug console
-(`main/devtest.h`) and returns to the launcher by itself; `tools/testrun.py` writes the
-results to `results/`. Shot images stay on the SD card in `/sd/showreel/test/`;
+(`main/testkit/devtest.h`) and returns to the launcher by itself; `tools/testrun.py`
+writes the results to `results/`. Shot images stay on the SD card in `/sd/showreel/test/`;
 `TESTFLAGS=--fetch` downloads them over BadgeLink, which is slow (over a minute each).
+
+The kit itself is the template's (`main/testkit/`, merged from upstream, documented in
+its README); `main/main.c` hands it a `devtest_content_t` whose five functions are
+`reel.h`'s own, which is all it takes to point the tests at the reel. The host-side
+scene checks use the engine's harness in the same way — see `synthengine3D/docs/testing.md`.
 
 ## Video export
 
@@ -161,6 +167,19 @@ To get an MP4:
 ```sh
 ffmpeg -i showreel.avi -c:v libx264 -preset slow -crf 18 -pix_fmt yuv420p -movflags +faststart showreel.mp4
 ```
+
+## From the template
+
+This app is built on [tanmatsu-template-grace](https://github.com/nullislandspace/tanmatsu-template-grace)
+and merges it for graceloader's symbol-export updates (`git fetch upstream && git merge
+upstream/main`). Two of its facilities are used here and documented in its README rather
+than repeated:
+
+- **SynthEngine3D wiring** — the engine is a submodule (`synthengine3D/`, pinned to V2.1);
+  `CMakeLists.txt` builds it through the template's guarded block, and engine settings such
+  as `SE_SCENE_TEXTURED_TRI_CAP` are set before `add_subdirectory()`.
+- **The test kit** — `main/testkit/`, which this app was the origin of. See "Checks and
+  device tests" above for how the reel uses it.
 
 ## License
 

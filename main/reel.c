@@ -9,9 +9,9 @@
 #include "craftminer/craftminer.h"
 #include "dev/dev.h"
 #include "esp_log.h"
-#include "showtime.h"
 #include "space/space.h"
 #include "synthengine3d.h"
+#include "testkit/showtime.h"
 
 static char const TAG[] = "reel";
 

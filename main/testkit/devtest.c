@@ -1,5 +1,5 @@
 // =====================================================================
-//  Showreel  --  automated device tests (see devtest.h)
+//  Test kit  --  automated device tests (see devtest.h)
 // =====================================================================
 
 #include "devtest.h"
@@ -13,13 +13,25 @@
 #include "esp_heap_caps.h"
 #include "esp_timer.h"
 #include "profile.h"
-#include "reel.h"
 #include "report.h"
 #include "screenshot.h"
 #include "showtime.h"
+// Primitive counts come from the engine when there is one; without it
+// (TESTKIT_NO_ENGINE) the records still carry the phase split, the frame
+// rate and the heap, and the counts read zero.
+#ifdef TESTKIT_NO_ENGINE
+static void scene_raster_stats(int* t, int* l, int64_t* tu, int64_t* lu) {
+    *t = *l = 0;
+    *tu = *lu = 0;
+}
+static void scene_textured_stats(int* t, int64_t* tu) {
+    *t  = 0;
+    *tu = 0;
+}
+#else
 #include "synthengine3d.h"
+#endif
 
-#define SHOT_DIR          "/sd/showreel/test"
 #define SHOTS_MAX         32
 #define SHOTPERF_MAX      16
 #define PERF_SECS_ENDLESS 30.0f
@@ -40,9 +52,19 @@ typedef struct {
     int64_t tris, ttris, lines;
 } shot_acc_t;
 
-static void (*s_stats_restart)(void);
-static test_t s_test;
-static char   s_scene[32];
+static devtest_config_t const* s_cfg;
+static test_t                  s_test;
+static char                    s_scene[32];
+
+// Shorthands for the two things every test does with the app's content.
+static double elapsed(void) {
+    return showtime_now() - s_cfg->content->started();
+}
+
+static char const* shot_name(void) {
+    char const* const n = s_cfg->content->shot_name();
+    return n ? n : "";
+}
 
 // perf
 static float      s_secs;
@@ -55,9 +77,12 @@ static float s_t[SHOTS_MAX];
 static int   s_t_n, s_t_i;
 static bool  s_shots_ok;
 
-void devtest_start(void (*stats_restart)(void)) {
-    s_stats_restart = stats_restart;
-    debugcon_start();
+void devtest_start(devtest_config_t const* cfg) {
+    s_cfg = cfg;
+    static debugcon_identity_t id;
+    id.app   = cfg->app;
+    id.state = cfg->content->name;
+    debugcon_start(&id);
 }
 
 // Leave exactly as the engine's F1 does (se_run.c): audio down, then
@@ -66,7 +91,9 @@ static void exit_to_launcher(char const* why) {
     report_emitf("BYE", "{\"t\":\"bye\",\"why\":\"%s\"}", why);
     fflush(stdout);
     vTaskDelay(pdMS_TO_TICKS(300));  // let the USB FIFO drain
-    audio_mixer_shutdown();
+#ifndef TESTKIT_NO_ENGINE
+    audio_mixer_shutdown();  // a speaker left running across the restart squeals
+#endif
     bsp_device_restart_to_launcher();
 }
 
@@ -103,19 +130,19 @@ static void start_perf(char const* args) {
     char secs[16];
     arg(args, "secs", secs, sizeof(secs));
     showtime_set_realtime();
-    if (!reel_hold(s_scene)) {
+    if (!s_cfg->content->select(s_scene)) {
         report_emitf("END", "{\"t\":\"end\",\"status\":\"error\",\"msg\":\"no scene '%s'\"}", s_scene);
         exit_to_launcher("bad scene");
         return;
     }
     // Default: the scene's own length, or a fixed stretch for an
     // endless one.
-    s_secs = secs[0] ? (float)strtol(secs, NULL, 10) : reel_scene_duration();
+    s_secs = secs[0] ? (float)strtol(secs, NULL, 10) : s_cfg->content->duration();
     if (s_secs <= 0.0f) s_secs = PERF_SECS_ENDLESS;
     s_acc_n         = 0;
     s_last_frame_us = 0;
     s_test          = T_PERF;
-    if (s_stats_restart) s_stats_restart();
+    if (s_cfg->stats_restart) s_cfg->stats_restart();
     report_emitf("BEGIN", "{\"t\":\"begin\",\"test\":\"perf\",\"scene\":\"%s\",\"secs\":%.2f}", s_scene,
                  (double)s_secs);
 }
@@ -133,14 +160,21 @@ static void start_shots(char const* args) {
         else
             break;
     }
-    if (s_t_n == 0 || !reel_hold(s_scene)) {
+    if (s_t_n == 0 || !s_cfg->content->select(s_scene)) {
         report_emitf("END", "{\"t\":\"end\",\"status\":\"error\",\"msg\":\"need scene= and ms=\"}");
         exit_to_launcher("bad args");
         return;
     }
     showtime_set_fixed_step(SHOTS_FIXED_FPS);
-    mkdir("/sd/showreel", 0777);
-    mkdir(SHOT_DIR, 0777);
+    // The shot directory and, if it is one level down, its parent.
+    char parent[96];
+    strlcpy(parent, s_cfg->shot_dir, sizeof(parent));
+    char* const slash = strrchr(parent, '/');
+    if (slash != NULL && slash != parent) {
+        *slash = '\0';
+        mkdir(parent, 0777);
+    }
+    mkdir(s_cfg->shot_dir, 0777);
     s_t_i      = 0;
     s_shots_ok = true;
     s_test     = T_SHOTS;
@@ -172,7 +206,7 @@ void devtest_update(void) {
         }
     }
     // Shots: this frame draws exactly the next requested instant.
-    if (s_test == T_SHOTS && s_t_i < s_t_n) showtime_set(reel_scene_start() + (double)s_t[s_t_i]);
+    if (s_test == T_SHOTS && s_t_i < s_t_n) showtime_set(s_cfg->content->started() + (double)s_t[s_t_i]);
 }
 
 static uint32_t fnv1a(void const* data, size_t n) {
@@ -201,7 +235,7 @@ static void perf_frame(int64_t rast_us) {
     scene_raster_stats(&tri_n, &line_n, &tri_us, &line_us);
     scene_textured_stats(&ttri_n, &ttri_us);
 
-    shot_acc_t* a = shot_slot(reel_shot_name());
+    shot_acc_t* a = shot_slot(shot_name());
     if (a != NULL && s_last_frame_us != 0) {
         int64_t const iv = now - s_last_frame_us;
         a->frames++;
@@ -215,7 +249,7 @@ static void perf_frame(int64_t rast_us) {
     }
     s_last_frame_us = now;
 
-    if (reel_scene_time() < (double)s_secs) return;
+    if (elapsed() < (double)s_secs) return;
     for (int i = 0; i < s_acc_n; i++) {
         shot_acc_t const* s = &s_acc[i];
         if (s->frames == 0) continue;
@@ -233,7 +267,7 @@ static void perf_frame(int64_t rast_us) {
 static void shots_frame(pax_buf_t* fb) {
     float const t = s_t[s_t_i];
     char        path[96];
-    snprintf(path, sizeof(path), SHOT_DIR "/%s_%06d.png", s_scene, (int)(t * 1000.0f + 0.5f));
+    snprintf(path, sizeof(path), "%s/%s_%06d.png", s_cfg->shot_dir, s_scene, (int)(t * 1000.0f + 0.5f));
     uint32_t const hash = fnv1a(pax_buf_get_pixels(fb), pax_buf_get_size(fb));
     bool const     ok   = screenshot_capture_to(fb, path);
     if (!ok) s_shots_ok = false;
@@ -245,7 +279,7 @@ static void shots_frame(pax_buf_t* fb) {
     report_emitf("SHOT",
                  "{\"i\":%d,\"t\":%.3f,\"shot\":\"%s\",\"path\":\"%s\",\"ok\":%s,\"fnv\":\"%08" PRIx32
                  "\",\"tris\":%d,\"ttris\":%d,\"lines\":%d}",
-                 s_t_i, (double)t, reel_shot_name(), path, ok ? "true" : "false", hash, tri_n, ttri_n, line_n);
+                 s_t_i, (double)t, shot_name(), path, ok ? "true" : "false", hash, tri_n, ttri_n, line_n);
 
     if (++s_t_i == s_t_n) end_test(s_shots_ok ? "ok" : "bad");
 }
@@ -281,8 +315,7 @@ void devtest_period(float fps, float frame_ms) {
     report_emitf("PERF",
                  "{\"t\":%.2f,\"shot\":\"%s\",\"fps\":%.2f,\"frame_ms\":%.3f,\"ph\":{%s},\"tris\":%d,\"tri_us\":%lld,"
                  "\"ttris\":%d,\"ttri_us\":%lld,\"lines\":%d,\"line_us\":%lld,\"sram\":%u,\"sram_big\":%u}",
-                 reel_scene_time(), reel_shot_name(), (double)fps, (double)frame_ms, ph, tri_n, (long long)tri_us,
-                 ttri_n, (long long)ttri_us, line_n, (long long)line_us,
-                 (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
+                 elapsed(), shot_name(), (double)fps, (double)frame_ms, ph, tri_n, (long long)tri_us, ttri_n,
+                 (long long)ttri_us, line_n, (long long)line_us, (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 }

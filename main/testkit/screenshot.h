@@ -1,6 +1,6 @@
 #pragma once
 // =====================================================================
-//  Showreel  --  debug screen capture
+//  Test kit  --  debug screen capture
 // ---------------------------------------------------------------------
 //  Writes the finished frame to the SD card as a PNG. A development
 //  tool: some rendering faults -- a stray line, a seam, a sliver of
@@ -27,7 +27,8 @@
 #include <stdbool.h>
 #include "pax_gfx.h"
 
-// Capture `fb` to the next free /sd/showreel/shotNNN.png. Returns
+// Capture `fb` to the next free <SCREENSHOT_DIR>/shotNNN.png (see
+// screenshot.c; the app sets that directory). Returns
 // false, with the reason logged, if the card is missing or the write
 // fails. A failed write leaves its truncated file on the card -- this
 // build's libc exports neither remove() nor unlink() -- so the error

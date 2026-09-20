@@ -10,7 +10,6 @@ project(app C)
 # App source files — add your .c files here
 set(APP_SOURCES
     main/main.c
-    main/showtime.c
     main/reel.c
     main/xform.c
     main/camera.c
@@ -70,11 +69,6 @@ set(APP_SOURCES
     main/craftminer/scenes/cm_building.c
     main/craftminer/scenes/cm_nightfall.c
     main/craftminer/scenes/cm_world_test.c
-    main/profile.c
-    main/screenshot.c
-    main/report.c
-    main/debugcon.c
-    main/devtest.c
     main/crt0.c
 )
 
@@ -116,6 +110,18 @@ set(SHOWREEL_SEGMENT "" CACHE STRING "Play only this segment's act (space, craft
 if(SHOWREEL_SEGMENT)
     add_compile_definitions(SHOWREEL_SEGMENT="${SHOWREEL_SEGMENT}")
 endif()
+# Automated device tests (main/testkit/, from the template): on, with
+# the reel's own paths. The shot tests need a build id in every record,
+# which the app_version.h above provides.
+list(APPEND APP_SOURCES
+    main/testkit/debugcon.c
+    main/testkit/devtest.c
+    main/testkit/profile.c
+    main/testkit/report.c
+    main/testkit/screenshot.c
+    main/testkit/showtime.c
+)
+add_compile_definitions(SCREENSHOT_DIR="/sd/showreel")
 
 # Include directories — add paths to your headers here
 set(APP_INCLUDES

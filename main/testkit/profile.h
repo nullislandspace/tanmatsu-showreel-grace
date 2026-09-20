@@ -1,6 +1,6 @@
 #pragma once
 // =====================================================================
-//  Showreel  --  frame phase timing
+//  Test kit  --  frame phase timing
 // ---------------------------------------------------------------------
 //  The same small profiler Stunt Racer uses: named phases wrapped in
 //  begin/end pairs at the call sites that matter, accumulated over a

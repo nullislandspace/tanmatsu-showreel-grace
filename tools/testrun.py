@@ -54,7 +54,14 @@ MANIFEST = os.path.join(REFS_DIR, "manifest.json")
 BL_RETRY = os.path.join(HERE, "badgelink_retry.sh")
 BL_SH = os.path.join(ROOT, "badgelink", "tools", "badgelink.sh")
 
+# The record framing; the app's REPORT_PREFIX (report.h) must match, and
+# --prefix rebuilds this for an app that changed it.
 RECORD = re.compile(r"^@@SR-([A-Z]+)@@ (.*?) @@([0-9a-f]{8})@@\s*$")
+
+
+def set_prefix(prefix):
+    global RECORD
+    RECORD = re.compile(r"^@@" + re.escape(prefix) + r"-([A-Z]+)@@ (.*?) @@([0-9a-f]{8})@@\s*$")
 CRASH = re.compile(r"Guru Meditation|abort\(\) was called|Backtrace:|rst:0x|ESP-ROM:|assert failed|Stack smashing")
 
 EXIT_OK, EXIT_LINK, EXIT_CRASH, EXIT_BAD, EXIT_MISMATCH, EXIT_USAGE = 0, 1, 2, 3, 4, 5
@@ -234,6 +241,7 @@ def main():
                     help="the app answers within ~10 s of starting (proxy restart included), or not at all")
     ap.add_argument("--run-timeout", type=float, default=120)
     ap.add_argument("--stall-timeout", type=float, default=10)
+    ap.add_argument("--prefix", default="SR", help="record prefix, as the app's REPORT_PREFIX (default SR)")
     ap.add_argument("--no-git-check", action="store_true", help="test whatever build the badge runs")
     ap.add_argument("--capture-refs", action="store_true", help="store the shots as the new references")
     ap.add_argument("--compare", action="store_true", help="compare the shots against the references")
@@ -246,6 +254,8 @@ def main():
                          "rather than the app)")
     ap.add_argument("test", nargs="+", help='e.g. perf scene=turntable secs=20')
     args = ap.parse_args()
+    if args.prefix != "SR":
+        set_prefix(args.prefix)
 
     if not args.port:
         print("no --port and no $PORT", file=sys.stderr)
@@ -366,8 +376,12 @@ def main():
             print(f"Running: {rec}")
         elif kind == "PERF":
             result["perf"].append(rec)
-            print(f"  t={rec['t']:6.2f} {rec['shot'] or '-':<12} {rec['fps']:5.1f} fps  rast {rec['ph']['rast']:6.2f}"
-                  f"  vsync {rec['ph']['vsync']:6.2f}  tris {rec['tris']} ttris {rec['ttris']}")
+            # The phase names are the app's (profile.h), so show the two
+            # biggest rather than assuming any particular ones exist.
+            top = sorted(rec.get("ph", {}).items(), key=lambda kv: -kv[1])[:2]
+            phases = "  ".join(f"{k} {v:6.2f}" for k, v in top)
+            print(f"  t={rec['t']:6.2f} {rec['shot'] or '-':<12} {rec['fps']:5.1f} fps  {phases}"
+                  f"  tris {rec.get('tris', 0)} ttris {rec.get('ttris', 0)}")
         elif kind == "SHOTPERF":
             result["shotperf"].append(rec)
         elif kind == "SHOT":
