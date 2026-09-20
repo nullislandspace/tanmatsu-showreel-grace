@@ -48,7 +48,7 @@
 //  self-test failed.
 // =====================================================================
 
-#include "host/scenecheck.h"
+#include "se_host.h"
 #include <float.h>
 #include <fnmatch.h>
 #include <math.h>
@@ -69,8 +69,8 @@
 #define CONTACT      0.02f
 #define BEAM_ON_HULL 0.05f  // a beam's end this near a hull is on it
 #define BEAM_MUZZLE  0.3f   // a beam starts on the object this near its muzzle
-#define TRI_CAP      4096   // se_scene.c SCENE_TRI_CAP (private)
-#define LINE_CAP     4096   // se_scene.c SCENE_LINE_CAP (private)
+#define TRI_CAP      SE_SCENE_TRI_CAP   // se_config.h, public since engine 2.1
+#define LINE_CAP     SE_SCENE_LINE_CAP
 
 // --- What to check ----------------------------------------------------------
 
@@ -322,9 +322,26 @@ static int clip_frustum(vec3_t* p, int n, float z_min) {
     return n;
 }
 
-// --- Hooks from the engine stand-in -------------------------------------------------
+// --- Hooks from the engine's host harness (synthengine3D/host/se_host.h) ------------
+//
+// The harness hands over plain float triples and the camera it applied;
+// the checks below work in vec3_t, so these four adapters are the whole
+// of the binding, and se_host_tri/line/point at the end of the section
+// are what the linker wants.
 
-void sc_tri(vec3_t const v[3], bool textured) {
+static vec3_t sc_to_camera(vec3_t p) {
+    float const w[3] = {p.x, p.y, p.z};
+    float       c[3];
+    se_host_to_camera(w, c);
+    return v3(c[0], c[1], c[2]);
+}
+
+static void sc_project(vec3_t c, float* sx, float* sy) {
+    float const cam[3] = {c.x, c.y, c.z};
+    se_host_project(cam, sx, sy);
+}
+
+static void sc_tri(vec3_t const v[3], bool textured) {
     vec3_t c[3];
     int    behind = 0;
     for (int i = 0; i < 3; i++) {
@@ -361,14 +378,14 @@ void sc_tri(vec3_t const v[3], bool textured) {
     }
 }
 
-void sc_line(vec3_t a, vec3_t b, uint32_t argb) {
+static void sc_line(vec3_t a, vec3_t b, uint32_t argb) {
     if ((argb == LASER_RED || argb == LASER_BLUE) && s_beam_n < MAX_BEAMS) s_beam[s_beam_n++] = (beam_t){a, b};
     vec3_t const ca = sc_to_camera(a), cb = sc_to_camera(b);
     if (ca.z < NEAR && cb.z < NEAR) return;
     s_n_line++;
 }
 
-void sc_point(vec3_t p) {
+static void sc_point(vec3_t p) {
     vec3_t const c = sc_to_camera(p);
     if (c.z < NEAR) return;
     float sx, sy;
@@ -376,6 +393,22 @@ void sc_point(vec3_t p) {
     int const px = (int)lroundf(sx), py = (int)lroundf(sy);
     if (px < 0 || px > DISPLAY_LOG_W - 1 || py < 0 || py > DISPLAY_LOG_H - 1) return;
     s_n_point++;
+}
+
+void se_host_tri(float const xyz[9], bool textured, uint32_t argb, uint32_t flags) {
+    (void)argb;  // a flat triangle's colour, or a texture's mean: not checked
+    (void)flags;
+    vec3_t const v[3] = {v3(xyz[0], xyz[1], xyz[2]), v3(xyz[3], xyz[4], xyz[5]), v3(xyz[6], xyz[7], xyz[8])};
+    sc_tri(v, textured);
+}
+
+void se_host_line(float const a[3], float const b[3], uint32_t argb) {
+    sc_line(v3(a[0], a[1], a[2]), v3(b[0], b[1], b[2]), argb);
+}
+
+void se_host_point(float const p[3], uint32_t argb) {
+    (void)argb;
+    sc_point(v3(p[0], p[1], p[2]));
 }
 
 // --- Clearances ---------------------------------------------------------------------

@@ -16,6 +16,7 @@ static char const TAG[] = "debugcon";
 
 #define READ_CHUNK    64
 #define BANNER_PERIOD pdMS_TO_TICKS(2000)
+#define QUEUE_WAIT    pdMS_TO_TICKS(100)
 
 typedef struct {
     char line[DEBUGCON_LINE_MAX];
@@ -44,7 +45,13 @@ static void handle_line(char const* line) {
         s_busy = true;
         cmd_t cmd;
         strlcpy(cmd.line, line, sizeof(cmd.line));
-        xQueueSend(s_queue, &cmd, portMAX_DELAY);
+        // Never block the listener on a main loop that is not draining
+        // the queue: drop the command instead, say so, and let the
+        // banner come back, which tells the host we are still idle.
+        if (xQueueSend(s_queue, &cmd, QUEUE_WAIT) != pdTRUE) {
+            ESP_LOGE(TAG, "command queue full, dropped: %s", line);
+            s_busy = false;
+        }
         return;
     }
     ESP_LOGW(TAG, "unknown command: %s", line);

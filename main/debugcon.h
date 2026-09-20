@@ -32,7 +32,15 @@ void debugcon_start(void);
 // Take the next queued command line, if any, without blocking.
 bool debugcon_poll(char out[DEBUGCON_LINE_MAX]);
 
-// Stop the READY banner while a test runs; resume it afterwards.
+// The READY banner: on while idle, off while a command is being carried
+// out, so a test's records are not interleaved with it.
+//
+// Queueing a command turns it off by itself, straight away, so nothing
+// slips out between the queue and the main loop picking it up -- and a
+// command that cannot be queued turns it back on. Whoever runs the
+// command owns the flag from then on and clears it when it is back to
+// idle (devtest.c does, at the end of a test). A runner that always
+// leaves for the launcher never has to.
 void debugcon_set_busy(bool busy);
 
 // Emit the identity record (READY / PONG / BEGIN use the same fields).

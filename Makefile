@@ -281,14 +281,21 @@ meshcheck:
 	$(BUILD)/host/meshcheck
 
 # Host-side check of every scene (tools/scenecheck.c): runs the real scene
-# and asset code at 30 fps against a stand-in engine (tools/host/) and
-# checks the near plane, list caps, clearances and framing. No badge
-# needed. SCENES="name ..." checks only those; SCENECHECK_FLAGS=-v lists
-# every clipped frame. mesh_render.c is built on its own, with its
+# and asset code at 30 fps against the engine's host harness
+# (synthengine3D/host, see its docs/testing.md) and checks the near
+# plane, list caps, clearances and framing. No badge needed.
+# SCENES="name ..." checks only those; SCENECHECK_FLAGS=-v lists every
+# clipped frame. mesh_render.c is built on its own, with its
 # mesh_submit / mesh_submit_part renamed, so the checker can wrap them.
-SCENECHECK_CFLAGS := -O2 -Wall -Wextra -Werror=implicit-function-declaration -DMESH_HOST -Itools/host -Itools -Imain \
-                     -Isynthengine3D/include -DSE_SCENE_TEXTURED_TRI_CAP=2048  # as CMakeLists.txt
-SCENECHECK_SRCS   := tools/scenecheck.c tools/host/engine_stub.c main/xform.c main/mesh.c main/camera.c main/horizon.c \
+#
+# The engine settings must match the app build or the checker compares
+# frames against the wrong caps, so they are read straight out of
+# CMakeLists.txt rather than written down twice.
+ENGINE_DEFS := $(shell sed -n 's/^add_compile_definitions(\(SE_[A-Z_]*=[0-9]*\))/-D\1/p' CMakeLists.txt)
+HOST_DIR    := synthengine3D/host
+SCENECHECK_CFLAGS := -O2 -Wall -Wextra -Werror=implicit-function-declaration -DMESH_HOST \
+                     -I$(HOST_DIR)/shims -I$(HOST_DIR) -Isynthengine3D/include -Itools -Imain $(ENGINE_DEFS)
+SCENECHECK_SRCS   := tools/scenecheck.c $(HOST_DIR)/se_host_stub.c main/xform.c main/mesh.c main/camera.c main/horizon.c \
                      $(wildcard main/common/*.c main/dev/*.c) $(shell find $(addprefix main/,$(SEGMENTS)) -name '*.c')
 
 .PHONY: scenecheck

@@ -73,6 +73,11 @@ static void exit_to_launcher(char const* why) {
 static void end_test(char const* status) {
     report_emitf("END", "{\"t\":\"end\",\"status\":\"%s\",\"scene\":\"%s\"}", status, s_scene);
     s_test = T_IDLE;
+    // Idle again, so the console banner belongs back on -- even though
+    // the line below never returns. Keeping the two in step here is what
+    // lets a runner that stays in the app (rather than leaving for the
+    // launcher) reuse this unchanged.
+    debugcon_set_busy(false);
     exit_to_launcher("test done");
 }
 
