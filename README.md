@@ -175,7 +175,7 @@ and merges it for graceloader's symbol-export updates (`git fetch upstream && gi
 upstream/main`). Two of its facilities are used here and documented in its README rather
 than repeated:
 
-- **SynthEngine3D wiring** — the engine is a submodule (`synthengine3D/`, pinned to V2.1);
+- **SynthEngine3D wiring** — the engine is a submodule (`synthengine3D/`, pinned to V2.6);
   `CMakeLists.txt` builds it through the template's guarded block, and engine settings such
   as `SE_SCENE_TEXTURED_TRI_CAP` are set before `add_subdirectory()`.
 - **The test kit** — `main/testkit/`, which this app was the origin of. See "Checks and
